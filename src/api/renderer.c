@@ -2,6 +2,7 @@
 #include "api.h"
 #include "../renderer.h"
 #include "../rencache.h"
+#include "../renwindow.h"
 #include "lua.h"
 
 // a reference index to a table that stores the fonts
@@ -198,7 +199,8 @@ static int f_font_get_width(lua_State *L) {
   size_t len;
   const char *text = luaL_checklstring(L, 2, &len);
 
-  lua_pushnumber(L, ren_font_group_get_width(&window_renderer, fonts, text, len, NULL));
+  const int surface_scale = renwin_get_surface(&window_renderer).scale;
+  lua_pushnumber(L, ren_font_group_get_width(fonts, surface_scale, text, len, NULL));
   return 1;
 }
 
@@ -266,10 +268,9 @@ static RenColor checkcolor(lua_State *L, int idx, int def) {
   return color;
 }
 
-
 static int f_show_debug(lua_State *L) {
   luaL_checkany(L, 1);
-  rencache_show_debug(lua_toboolean(L, 1));
+  rencache_show_debug(rencache, lua_toboolean(L, 1));
   return 0;
 }
 
@@ -284,13 +285,13 @@ static int f_get_size(lua_State *L) {
 
 
 static int f_begin_frame(UNUSED lua_State *L) {
-  rencache_begin_frame(&window_renderer);
+  rencache_begin_frame(rencache, &window_renderer);
   return 0;
 }
 
 
 static int f_end_frame(UNUSED lua_State *L) {
-  rencache_end_frame(&window_renderer);
+  rencache_end_frame(rencache, &window_renderer);
   // clear the font reference table
   lua_newtable(L);
   lua_rawseti(L, LUA_REGISTRYINDEX, RENDERER_FONT_REF);
@@ -311,7 +312,7 @@ static int f_set_clip_rect(lua_State *L) {
   lua_Number w = luaL_checknumber(L, 3);
   lua_Number h = luaL_checknumber(L, 4);
   RenRect rect = rect_to_grid(x, y, w, h);
-  rencache_set_clip_rect(&window_renderer, rect);
+  rencache_set_clip_rect(rencache, rect);
   return 0;
 }
 
@@ -323,7 +324,7 @@ static int f_draw_rect(lua_State *L) {
   lua_Number h = luaL_checknumber(L, 4);
   RenRect rect = rect_to_grid(x, y, w, h);
   RenColor color = checkcolor(L, 5, 255);
-  rencache_draw_rect(&window_renderer, rect, color);
+  rencache_draw_rect(rencache, rect, color);
   return 0;
 }
 
@@ -348,7 +349,7 @@ static int f_draw_text(lua_State *L) {
   double x = luaL_checknumber(L, 3);
   int y = luaL_checknumber(L, 4);
   RenColor color = checkcolor(L, 5, 255);
-  x = rencache_draw_text(&window_renderer, fonts, text, len, x, y, color);
+  x = rencache_draw_text(rencache, fonts, text, len, x, y, color);
   lua_pushnumber(L, x);
   return 1;
 }
@@ -389,5 +390,6 @@ int luaopen_renderer(lua_State *L) {
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   lua_setfield(L, -2, "font");
+
   return 1;
 }

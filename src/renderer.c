@@ -362,7 +362,7 @@ int ren_font_group_get_height(RenFont **fonts) {
   return fonts[0]->height;
 }
 
-double ren_font_group_get_width(RenWindow *window_renderer, RenFont **fonts, const char *text, size_t len, int *x_offset) {
+double ren_font_group_get_width(RenFont **fonts, const int surface_scale, const char *text, size_t len, int *x_offset) {
   double width = 0;
   const char* end = text + len;
   GlyphMetric* metric = NULL; GlyphSet* set = NULL;
@@ -379,7 +379,6 @@ double ren_font_group_get_width(RenWindow *window_renderer, RenFont **fonts, con
       *x_offset = metric->bitmap_left; // TODO: should this be scaled by the surface scale?
     }
   }
-  const int surface_scale = renwin_get_surface(window_renderer).scale;
   if (!set_x_offset) {
     *x_offset = 0;
   }
@@ -518,9 +517,6 @@ void ren_draw_rect(RenSurface *rs, RenRect rect, RenColor color) {
 void ren_free_window_resources(RenWindow *window_renderer) {
   renwin_free(window_renderer);
   SDL_FreeSurface(draw_rect_surface);
-  free(window_renderer->command_buf);
-  window_renderer->command_buf = NULL;
-  window_renderer->command_buf_size = 0;
 }
 
 // TODO remove global and return RenWindow*
@@ -533,7 +529,6 @@ void ren_init(SDL_Window *win) {
   }
   window_renderer.window = win;
   renwin_init_surface(&window_renderer);
-  renwin_init_command_buf(&window_renderer);
   renwin_clip_to_surface(&window_renderer);
   draw_rect_surface = SDL_CreateRGBSurface(0, 1, 1, 32,
                        0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);

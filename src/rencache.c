@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdlib.h>
 
 #ifdef _MSC_VER
   #ifndef alignof
@@ -23,6 +24,8 @@
 ** commands when issued. At the end of the frame we write the commands to a grid
 ** of hash values, take the cells that have changed since the previous frame,
 ** merge them into dirty rectangles and redraw only those regions */
+
+RenCache* rencache = NULL;
 
 #define CELLS_X 80
 #define CELLS_Y 50
@@ -60,15 +63,41 @@ typedef struct {
   RenColor color;
 } DrawRectCommand;
 
-static unsigned cells_buf1[CELLS_X * CELLS_Y];
-static unsigned cells_buf2[CELLS_X * CELLS_Y];
-static unsigned *cells_prev = cells_buf1;
-static unsigned *cells = cells_buf2;
-static RenRect rect_buf[CELLS_X * CELLS_Y / 2];
-static bool resize_issue;
-static RenRect screen_rect;
-static RenRect last_clip_rect;
-static bool show_debug;
+RenCache* rencache_create(const int surface_scale) {
+    RenCache* cache = malloc(sizeof(RenCache));
+    if (!cache) return NULL;
+
+    cache->cells_buf1 = malloc(sizeof(unsigned) * CELLS_X * CELLS_Y);
+    cache->cells_buf2 = malloc(sizeof(unsigned) * CELLS_X * CELLS_Y);
+    cache->rect_buf = malloc(sizeof(RenRect) * CELLS_X * CELLS_Y / 2);
+    cache->command_buf_size = 0;
+    cache->command_buf = NULL;
+
+    if (!cache->cells_buf1 || !cache->cells_buf2 || !cache->rect_buf) {
+        rencache_destroy(cache);
+        return NULL;
+    }
+
+    cache->cells_prev = cache->cells_buf1;
+    cache->cells = cache->cells_buf2;
+    cache->resize_issue = false;
+    cache->screen_rect = (RenRect){0};
+    cache->last_clip_rect = (RenRect){0};
+    cache->surface_scale = surface_scale;
+    cache->show_debug = false;
+
+    return cache;
+}
+
+void rencache_destroy(RenCache* cache) {
+    if (cache) {
+        free(cache->cells_buf1);
+        free(cache->cells_buf2);
+        free(cache->rect_buf);
+        free(cache->command_buf);
+        free(cache);
+    }
+}
 
 static inline int rencache_min(int a, int b) { return a < b ? a : b; }
 static inline int rencache_max(int a, int b) { return a > b ? a : b; }
@@ -113,22 +142,22 @@ static RenRect merge_rects(RenRect a, RenRect b) {
   return (RenRect) { x1, y1, x2 - x1, y2 - y1 };
 }
 
-static bool expand_command_buffer(RenWindow *window_renderer) {
-  size_t new_size = window_renderer->command_buf_size * CMD_BUF_RESIZE_RATE;
+static bool expand_command_buffer(RenCache* cache) {
+  size_t new_size = cache->command_buf_size * CMD_BUF_RESIZE_RATE;
   if (new_size == 0) {
     new_size = CMD_BUF_INIT_SIZE;
   }
-  uint8_t *new_command_buf = realloc(window_renderer->command_buf, new_size);
+  uint8_t *new_command_buf = realloc(cache->command_buf, new_size);
   if (!new_command_buf) {
     return false;
   }
-  window_renderer->command_buf_size = new_size;
-  window_renderer->command_buf = new_command_buf;
+  cache->command_buf_size = new_size;
+  cache->command_buf = new_command_buf;
   return true;
 }
 
-static void* push_command(RenWindow *window_renderer, enum CommandType type, int size) {
-  if (resize_issue) {
+static void* push_command(RenCache* cache, enum CommandType type, int size) {
+  if (cache->resize_issue) {
     // Don't push new commands as we had problems resizing the command buffer.
     // Let's wait for the next frame.
     return NULL;
@@ -136,17 +165,17 @@ static void* push_command(RenWindow *window_renderer, enum CommandType type, int
   size_t alignment = alignof(max_align_t) - 1;
   size += COMMAND_BARE_SIZE;
   size = (size + alignment) & ~alignment;
-  int n = window_renderer->command_buf_idx + size;
-  while (n > window_renderer->command_buf_size) {
-    if (!expand_command_buffer(window_renderer)) {
+  int n = cache->command_buf_idx + size;
+  while (n > cache->command_buf_size) {
+    if (!expand_command_buffer(cache)) {
       fprintf(stderr, "Warning: (" __FILE__ "): unable to resize command buffer (%zu)\n",
-              (size_t)(window_renderer->command_buf_size * CMD_BUF_RESIZE_RATE));
-      resize_issue = true;
+              (size_t)(cache->command_buf_size * CMD_BUF_RESIZE_RATE));
+      cache->resize_issue = true;
       return NULL;
     }
   }
-  Command *cmd = (Command*) (window_renderer->command_buf + window_renderer->command_buf_idx);
-  window_renderer->command_buf_idx = n;
+  Command *cmd = (Command*) (cache->command_buf + cache->command_buf_idx);
+  cache->command_buf_idx = n;
   memset(cmd, 0, size);
   cmd->type = type;
   cmd->size = size;
@@ -154,49 +183,49 @@ static void* push_command(RenWindow *window_renderer, enum CommandType type, int
 }
 
 
-static bool next_command(RenWindow *window_renderer, Command **prev) {
+static bool next_command(RenCache *cache, Command **prev) {
   if (*prev == NULL) {
-    *prev = (Command*) window_renderer->command_buf;
+    *prev = (Command*) cache->command_buf;
   } else {
     *prev = (Command*) (((char*) *prev) + (*prev)->size);
   }
-  return *prev != ((Command*) (window_renderer->command_buf + window_renderer->command_buf_idx));
+  return *prev != ((Command*) (cache->command_buf + cache->command_buf_idx));
 }
 
 
-void rencache_show_debug(bool enable) {
-  show_debug = enable;
+void rencache_show_debug(RenCache* cache, bool enable) {
+  cache->show_debug = enable;
 }
 
 
-void rencache_set_clip_rect(RenWindow *window_renderer, RenRect rect) {
-  SetClipCommand *cmd = push_command(window_renderer, SET_CLIP, sizeof(SetClipCommand));
+void rencache_set_clip_rect(RenCache* cache, RenRect rect) {
+  SetClipCommand *cmd = push_command(cache, SET_CLIP, sizeof(SetClipCommand));
   if (cmd) {
-    cmd->rect = intersect_rects(rect, screen_rect);
-    last_clip_rect = cmd->rect;
+    cmd->rect = intersect_rects(rect, cache->screen_rect);
+    cache->last_clip_rect = cmd->rect;
   }
 }
 
 
-void rencache_draw_rect(RenWindow *window_renderer, RenRect rect, RenColor color) {
-  if (rect.width == 0 || rect.height == 0 || !rects_overlap(last_clip_rect, rect)) {
+void rencache_draw_rect(RenCache* cache, RenRect rect, RenColor color) {
+  if (rect.width == 0 || rect.height == 0 || !rects_overlap(cache->last_clip_rect, rect)) {
     return;
   }
-  DrawRectCommand *cmd = push_command(window_renderer, DRAW_RECT, sizeof(DrawRectCommand));
+  DrawRectCommand *cmd = push_command(cache, DRAW_RECT, sizeof(DrawRectCommand));
   if (cmd) {
     cmd->rect = rect;
     cmd->color = color;
   }
 }
 
-double rencache_draw_text(RenWindow *window_renderer, RenFont **fonts, const char *text, size_t len, double x, int y, RenColor color)
+double rencache_draw_text(RenCache* cache, RenFont **fonts, const char *text, size_t len, double x, int y, RenColor color)
 {
   int x_offset;
-  double width = ren_font_group_get_width(window_renderer, fonts, text, len, &x_offset);
+  double width = ren_font_group_get_width(fonts, cache->surface_scale, text, len, &x_offset);
   RenRect rect = { x + x_offset, y, (int)(width - x_offset), ren_font_group_get_height(fonts) };
-  if (rects_overlap(last_clip_rect, rect)) {
+  if (rects_overlap(cache->last_clip_rect, rect)) {
     int sz = len + 1;
-    DrawTextCommand *cmd = push_command(window_renderer, DRAW_TEXT, sizeof(DrawTextCommand) + sz);
+    DrawTextCommand *cmd = push_command(cache, DRAW_TEXT, sizeof(DrawTextCommand) + sz);
     if (cmd) {
       memcpy(cmd->text, text, sz);
       cmd->color = color;
@@ -211,26 +240,26 @@ double rencache_draw_text(RenWindow *window_renderer, RenFont **fonts, const cha
 }
 
 
-void rencache_invalidate(void) {
-  memset(cells_prev, 0xff, sizeof(cells_buf1));
+void rencache_invalidate(RenCache* cache) {
+  memset(cache->cells_prev, 0xff, sizeof(unsigned) * CELLS_X * CELLS_Y);
 }
 
 
-void rencache_begin_frame(RenWindow *window_renderer) {
+void rencache_begin_frame(RenCache* cache, RenWindow *window_renderer) {
   /* reset all cells if the screen width/height has changed */
   int w, h;
-  resize_issue = false;
+  cache->resize_issue = false;
   ren_get_size(window_renderer, &w, &h);
-  if (screen_rect.width != w || h != screen_rect.height) {
-    screen_rect.width = w;
-    screen_rect.height = h;
-    rencache_invalidate();
+  if (cache->screen_rect.width != w || h != cache->screen_rect.height) {
+    cache->screen_rect.width = w;
+    cache->screen_rect.height = h;
+    rencache_invalidate(cache);
   }
-  last_clip_rect = screen_rect;
+  cache->last_clip_rect = cache->screen_rect;
 }
 
 
-static void update_overlapping_cells(RenRect r, unsigned h) {
+static void update_overlapping_cells(RenCache* cache, RenRect r, unsigned h) {
   int x1 = r.x / CELL_SIZE;
   int y1 = r.y / CELL_SIZE;
   int x2 = (r.x + r.width) / CELL_SIZE;
@@ -239,74 +268,74 @@ static void update_overlapping_cells(RenRect r, unsigned h) {
   for (int y = y1; y <= y2; y++) {
     for (int x = x1; x <= x2; x++) {
       int idx = cell_idx(x, y);
-      hash(&cells[idx], &h, sizeof(h));
+      hash(&cache->cells[idx], &h, sizeof(h));
     }
   }
 }
 
 
-static void push_rect(RenRect r, int *count) {
+static void push_rect(RenCache* cache, RenRect r, int *count) {
   /* try to merge with existing rectangle */
   for (int i = *count - 1; i >= 0; i--) {
-    RenRect *rp = &rect_buf[i];
+    RenRect *rp = &cache->rect_buf[i];
     if (rects_overlap(*rp, r)) {
       *rp = merge_rects(*rp, r);
       return;
     }
   }
   /* couldn't merge with previous rectangle: push */
-  rect_buf[(*count)++] = r;
+  cache->rect_buf[(*count)++] = r;
 }
 
 
-void rencache_end_frame(RenWindow *window_renderer) {
+void rencache_end_frame(RenCache* cache, RenWindow *window_renderer) {
   /* update cells from commands */
   Command *cmd = NULL;
-  RenRect cr = screen_rect;
-  while (next_command(window_renderer, &cmd)) {
+  RenRect cr = cache->screen_rect;
+  while (next_command(cache, &cmd)) {
     /* cmd->command[0] should always be the Command rect */
     if (cmd->type == SET_CLIP) { cr = cmd->command[0]; }
     RenRect r = intersect_rects(cmd->command[0], cr);
     if (r.width == 0 || r.height == 0) { continue; }
     unsigned h = HASH_INITIAL;
     hash(&h, cmd, cmd->size);
-    update_overlapping_cells(r, h);
+    update_overlapping_cells(cache, r, h);
   }
 
   /* push rects for all cells changed from last frame, reset cells */
   int rect_count = 0;
-  int max_x = screen_rect.width / CELL_SIZE + 1;
-  int max_y = screen_rect.height / CELL_SIZE + 1;
+  int max_x = cache->screen_rect.width / CELL_SIZE + 1;
+  int max_y = cache->screen_rect.height / CELL_SIZE + 1;
   for (int y = 0; y < max_y; y++) {
     for (int x = 0; x < max_x; x++) {
       /* compare previous and current cell for change */
       int idx = cell_idx(x, y);
-      if (cells[idx] != cells_prev[idx]) {
-        push_rect((RenRect) { x, y, 1, 1 }, &rect_count);
+      if (cache->cells[idx] != cache->cells_prev[idx]) {
+        push_rect(cache, (RenRect) { x, y, 1, 1 }, &rect_count);
       }
-      cells_prev[idx] = HASH_INITIAL;
+      cache->cells_prev[idx] = HASH_INITIAL;
     }
   }
 
   /* expand rects from cells to pixels */
   for (int i = 0; i < rect_count; i++) {
-    RenRect *r = &rect_buf[i];
+    RenRect *r = &cache->rect_buf[i];
     r->x *= CELL_SIZE;
     r->y *= CELL_SIZE;
     r->width *= CELL_SIZE;
     r->height *= CELL_SIZE;
-    *r = intersect_rects(*r, screen_rect);
+    *r = intersect_rects(*r, cache->screen_rect);
   }
 
   RenSurface rs = renwin_get_surface(window_renderer);
   /* redraw updated regions */
   for (int i = 0; i < rect_count; i++) {
     /* draw */
-    RenRect r = rect_buf[i];
+    RenRect r = cache->rect_buf[i];
     ren_set_clip_rect(window_renderer, r);
 
     cmd = NULL;
-    while (next_command(window_renderer, &cmd)) {
+    while (next_command(cache, &cmd)) {
       SetClipCommand *ccmd = (SetClipCommand*)&cmd->command;
       DrawRectCommand *rcmd = (DrawRectCommand*)&cmd->command;
       DrawTextCommand *tcmd = (DrawTextCommand*)&cmd->command;
@@ -324,7 +353,7 @@ void rencache_end_frame(RenWindow *window_renderer) {
       }
     }
 
-    if (show_debug) {
+    if (cache->show_debug) {
       RenColor color = { rand(), rand(), rand(), 50 };
       ren_draw_rect(&rs, r, color);
     }
@@ -332,13 +361,13 @@ void rencache_end_frame(RenWindow *window_renderer) {
 
   /* update dirty rects */
   if (rect_count > 0) {
-    ren_update_rects(window_renderer, rect_buf, rect_count);
+    ren_update_rects(window_renderer, cache->rect_buf, rect_count);
   }
 
   /* swap cell buffer and reset */
-  unsigned *tmp = cells;
-  cells = cells_prev;
-  cells_prev = tmp;
-  window_renderer->command_buf_idx = 0;
+  unsigned *tmp = cache->cells;
+  cache->cells = cache->cells_prev;
+  cache->cells_prev = tmp;
+  cache->command_buf_idx = 0;
 }
 

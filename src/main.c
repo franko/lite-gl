@@ -181,6 +181,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Error creating lite-xl window: %s", SDL_GetError());
     exit(1);
   }
+  rencache = rencache_create(1);
   ren_init(window);
 
   lua_State *L;
@@ -266,13 +267,17 @@ init_lua:
   lua_pcall(L, 0, 1, 0);
   if (lua_toboolean(L, -1)) {
     lua_close(L);
-    rencache_invalidate();
+    rencache_invalidate(rencache);
     goto init_lua;
   }
 
   // This allows the window to be destroyed before lite-xl is done with
   // reaping child processes
   ren_free_window_resources(&window_renderer);
+  if (rencache) {
+    rencache_destroy(rencache);
+    rencache = NULL;
+  }
   lua_close(L);
 
   return EXIT_SUCCESS;

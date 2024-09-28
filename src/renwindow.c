@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include "renwindow.h"
+#include "rencache.h"
 
 #ifdef LITE_USE_SDL_RENDERER
 static int query_surface_scale(RenWindow *ren) {
@@ -43,13 +44,8 @@ void renwin_init_surface(RenWindow *ren) {
     exit(1);
   }
   setup_renderer(ren, w, h);
+  rencache->surface_scale = renwin_get_surface(ren).scale;
 #endif
-}
-
-void renwin_init_command_buf(RenWindow *ren) {
-  ren->command_buf = NULL;
-  ren->command_buf_idx = 0;
-  ren->command_buf_size = 0;
 }
 
 
