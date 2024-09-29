@@ -48,10 +48,6 @@ cc = meson.get_compiler('c')
 
 lite_includes = []
 lite_cargs = ['-DSDL_MAIN_HANDLED', '-DPCRE2_STATIC']
-# On macos we need to use the SDL renderer to support retina displays
-if get_option('renderer') or host_machine.system() == 'darwin'
-    lite_cargs += '-DLITE_USE_SDL_RENDERER'
-endif
 if get_option('arch_tuple') != ''
     arch_tuple = get_option('arch_tuple')
 else

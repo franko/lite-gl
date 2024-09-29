@@ -7,10 +7,10 @@ BUILD_TYPE=Release
 
 if [[ "$OSTYPE" == "msys" ]]; then
     # On Windows we use Lua with the utf8 patch
-    packages=(pcre2 freetype2 "sdl2 -threads -loadso" "lua -utf8")
+    packages=(pcre2 freetype2 "sdl2 -threads -opengl -render -loadso" "lua -utf8")
 elif [[ "$OSTYPE" == "linux"* || "$OSTYPE" == "freebsd"* ]]; then
     # On linux opengl and render is not needed
-    packages=(pcre2 freetype2 "sdl2 -x11 -threads -loadso" "lua")
+    packages=(pcre2 freetype2 "sdl2 -x11 -threads -opengl -render -loadso" "lua")
 else
     # elif [[ "$OSTYPE" == "darwin"* ]]; then
     # on macOS we need to enable opengl and render
