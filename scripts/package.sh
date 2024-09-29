@@ -44,7 +44,7 @@ source_package() {
   rm -f ${package_name}.tar.gz
 
   meson subprojects download
-  meson setup ${build_dir} -Dsource-only=true
+  meson setup ${build_dir}
 
   # Note: not using git-archive(-all) because it can't include subprojects ignored by git
   rsync -arv \
