@@ -36,6 +36,10 @@ static void* check_alloc(void *ptr) {
   return ptr;
 }
 
+static RenRect scaled_rect(const RenRect rect, const int scale) {
+  return (RenRect) {rect.x * scale, rect.y * scale, rect.width * scale, rect.height * scale};
+}
+
 /************************* Fonts *************************/
 
 typedef struct {
@@ -568,13 +572,13 @@ void ren_update_rects(RenWindow *window_renderer, RenRect *rects, int count) {
 }
 
 
-void ren_set_clip_rect(RenWindow *window_renderer, RenRect rect) {
-  renwin_set_clip_rect(window_renderer, rect);
+void ren_set_clip_rect(RenSurface *rs, RenRect rect) {
+  RenRect sr = scaled_rect(rect, rs->scale);
+  SDL_SetClipRect(rs->surface, &(SDL_Rect){.x = sr.x, .y = sr.y, .w = sr.width, .h = sr.height});
 }
 
 
-void ren_get_size(RenWindow *window_renderer, int *x, int *y) {
-  RenSurface rs = renwin_get_surface(window_renderer);
-  *x = rs.surface->w / rs.scale;
-  *y = rs.surface->h / rs.scale;
+void ren_get_size(RenSurface *rs, int *x, int *y) {
+  *x = rs->surface->w / rs->scale;
+  *y = rs->surface->h / rs->scale;
 }

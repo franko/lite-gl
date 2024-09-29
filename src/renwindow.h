@@ -15,7 +15,6 @@ typedef struct RenWindow RenWindow;
 
 void renwin_init_surface(RenWindow *ren);
 void renwin_clip_to_surface(RenWindow *ren);
-void renwin_set_clip_rect(RenWindow *ren, RenRect rect);
 void renwin_resize_surface(RenWindow *ren);
 void renwin_update_scale(RenWindow *ren);
 void renwin_show_window(RenWindow *ren);

@@ -2,6 +2,7 @@
 #include "api.h"
 #include "../renderer.h"
 #include "../rencache.h"
+#include "../renwindow.h"
 #include "lua.h"
 
 // a reference index to a table that stores the fonts
@@ -275,7 +276,8 @@ static int f_show_debug(lua_State *L) {
 
 static int f_get_size(lua_State *L) {
   int w, h;
-  ren_get_size(&window_renderer, &w, &h);
+  RenSurface rs = renwin_get_surface(&window_renderer);
+  ren_get_size(&rs, &w, &h);
   lua_pushnumber(L, w);
   lua_pushnumber(L, h);
   return 2;
@@ -283,13 +285,17 @@ static int f_get_size(lua_State *L) {
 
 
 static int f_begin_frame(UNUSED lua_State *L) {
-  rencache_begin_frame(rencache, &window_renderer);
+  RenSurface rs = renwin_get_surface(&window_renderer);
+  rencache_begin_frame(rencache, &rs);
   return 0;
 }
 
 
 static int f_end_frame(UNUSED lua_State *L) {
-  rencache_end_frame(rencache, &window_renderer);
+  RenSurface rs = renwin_get_surface(&window_renderer);
+  rencache_end_frame(rencache, &rs);
+  rencache_update_window(rencache, &window_renderer);
+  rencache_swap_buffers(rencache);
   // clear the font reference table
   lua_newtable(L);
   lua_rawseti(L, LUA_REGISTRYINDEX, RENDERER_FONT_REF);
