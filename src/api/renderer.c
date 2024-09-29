@@ -2,7 +2,6 @@
 #include "api.h"
 #include "../renderer.h"
 #include "../rencache.h"
-#include "../renwindow.h"
 #include "lua.h"
 
 // a reference index to a table that stores the fonts
@@ -199,8 +198,7 @@ static int f_font_get_width(lua_State *L) {
   size_t len;
   const char *text = luaL_checklstring(L, 2, &len);
 
-  const int surface_scale = renwin_get_surface(&window_renderer).scale;
-  lua_pushnumber(L, ren_font_group_get_width(fonts, surface_scale, text, len, NULL));
+  lua_pushnumber(L, ren_font_group_get_width(fonts, text, len, NULL));
   return 1;
 }
 

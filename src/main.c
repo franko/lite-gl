@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Error creating lite-xl window: %s", SDL_GetError());
     exit(1);
   }
-  rencache = rencache_create(1);
+  rencache = rencache_create();
   ren_init(window);
 
   lua_State *L;

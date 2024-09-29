@@ -17,11 +17,10 @@ typedef struct RenCache {
     int command_buf_idx;
     RenRect screen_rect;
     RenRect last_clip_rect;
-    int surface_scale;
     bool show_debug;
 } RenCache;
 
-RenCache* rencache_create(const int surface_scale);
+RenCache* rencache_create();
 void rencache_destroy(RenCache* cache);
 
 void  rencache_show_debug(RenCache* cache, bool enable);

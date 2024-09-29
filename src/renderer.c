@@ -267,12 +267,13 @@ RenFont* ren_font_load(RenWindow *window_renderer, const char* path, float size,
     goto failure;
 
   const int surface_scale = renwin_get_surface(window_renderer).scale;
-  if (FT_Set_Pixel_Sizes(face, 0, (int)(size*surface_scale)))
+  const float scaled_size = roundf(size * surface_scale);
+  if (FT_Set_Pixel_Sizes(face, 0, scaled_size))
     goto failure;
 
   strcpy(font->path, path);
   font->face = face;
-  font->size = size;
+  font->size = scaled_size / surface_scale;
   font->height = (short)((face->height / (float)face->units_per_EM) * font->size);
   font->baseline = (short)((face->ascender / (float)face->units_per_EM) * font->size);
   font->antialiasing = antialiasing;
@@ -314,6 +315,15 @@ RenFont* ren_font_copy(RenWindow *window_renderer, RenFont* font, float size, ER
 
 const char* ren_font_get_path(RenFont *font) {
   return font->path;
+}
+
+int ren_font_get_scale(RenFont *font) {
+  /* Normally we may extract two scaling factor along x and y axis but,
+     given the way we create fonts they should be always the same so we
+     just look at the size along y. */
+  int scaled_size_y = font->face->size->metrics.y_ppem;
+  float surface_scale_y = (float)scaled_size_y / font->size;
+  return (int) roundf(surface_scale_y);
 }
 
 void ren_font_free(RenFont* font) {
@@ -362,18 +372,25 @@ int ren_font_group_get_height(RenFont **fonts) {
   return fonts[0]->height;
 }
 
-double ren_font_group_get_width(RenFont **fonts, const int surface_scale, const char *text, size_t len, int *x_offset) {
+double ren_font_group_get_width(RenFont **fonts, const char *text, size_t len, int *x_offset) {
   double width = 0;
   const char* end = text + len;
   GlyphMetric* metric = NULL; GlyphSet* set = NULL;
   bool set_x_offset = x_offset == NULL;
+  int surface_scale = -1;
   while (text < end) {
     unsigned int codepoint;
     text = utf8_to_codepoint(text, &codepoint);
     RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, 0);
+    /* we assume font is not NULL here because the previous function always return
+       a non-null font except is a null metric pointer is provided. */
+    assert(font != NULL);
+    if (surface_scale < 0) {
+      surface_scale = ren_font_get_scale(font);
+    }
     if (!metric)
       break;
-    width += (!font || metric->xadvance) ? metric->xadvance : fonts[0]->space_advance;
+    width += metric->xadvance ? metric->xadvance : fonts[0]->space_advance;
     if (!set_x_offset) {
       set_x_offset = true;
       *x_offset = metric->bitmap_left; // TODO: should this be scaled by the surface scale?

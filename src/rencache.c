@@ -63,7 +63,7 @@ typedef struct {
   RenColor color;
 } DrawRectCommand;
 
-RenCache* rencache_create(const int surface_scale) {
+RenCache* rencache_create() {
     RenCache* cache = malloc(sizeof(RenCache));
     if (!cache) return NULL;
 
@@ -83,7 +83,6 @@ RenCache* rencache_create(const int surface_scale) {
     cache->resize_issue = false;
     cache->screen_rect = (RenRect){0};
     cache->last_clip_rect = (RenRect){0};
-    cache->surface_scale = surface_scale;
     cache->show_debug = false;
 
     return cache;
@@ -221,7 +220,7 @@ void rencache_draw_rect(RenCache* cache, RenRect rect, RenColor color) {
 double rencache_draw_text(RenCache* cache, RenFont **fonts, const char *text, size_t len, double x, int y, RenColor color)
 {
   int x_offset;
-  double width = ren_font_group_get_width(fonts, cache->surface_scale, text, len, &x_offset);
+  double width = ren_font_group_get_width(fonts, text, len, &x_offset);
   RenRect rect = { x + x_offset, y, (int)(width - x_offset), ren_font_group_get_height(fonts) };
   if (rects_overlap(cache->last_clip_rect, rect)) {
     int sz = len + 1;
