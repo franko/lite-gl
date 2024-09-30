@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "rensurface.h"
+
 #ifdef __GNUC__
 #define UNUSED __attribute__((__unused__))
 #else
@@ -18,8 +20,6 @@ typedef enum { FONT_HINTING_NONE, FONT_HINTING_SLIGHT, FONT_HINTING_FULL } ERenF
 typedef enum { FONT_ANTIALIASING_NONE, FONT_ANTIALIASING_GRAYSCALE, FONT_ANTIALIASING_SUBPIXEL } ERenFontAntialiasing;
 typedef enum { FONT_STYLE_BOLD = 1, FONT_STYLE_ITALIC = 2, FONT_STYLE_UNDERLINE = 4, FONT_STYLE_SMOOTH = 8, FONT_STYLE_STRIKETHROUGH = 16 } ERenFontStyle;
 typedef struct { uint8_t b, g, r, a; } RenColor;
-typedef struct { int x, y, width, height; } RenRect;
-typedef struct { SDL_Surface *surface; int scale; } RenSurface;
 
 struct RenWindow;
 typedef struct RenWindow RenWindow;

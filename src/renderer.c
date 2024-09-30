@@ -567,7 +567,8 @@ void ren_update_rects(RenWindow *window_renderer, RenRect *rects, int count) {
     renwin_show_window(window_renderer);
     initial_frame = false;
   }
-  renwin_update_rects(window_renderer, rects, count);
+  rensurf_update_rects(&window_renderer->rensurface, rects, count);
+  renwin_render_surface(window_renderer);
 }
 
 
