@@ -3,8 +3,6 @@
 
 struct RenWindow {
   SDL_Window *window;
-  float scale_x;
-  float scale_y;
   SDL_Renderer *renderer;
   SDL_Texture *texture;
   RenSurface rensurface;

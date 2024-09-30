@@ -28,7 +28,6 @@ static void setup_renderer(RenWindow *ren, int w, int h) {
 
 
 void renwin_init_surface(RenWindow *ren) {
-  ren->scale_x = ren->scale_y = 1;
   if (ren->rensurface.surface) {
     SDL_FreeSurface(ren->rensurface.surface);
   }
