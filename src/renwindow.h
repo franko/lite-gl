@@ -6,6 +6,7 @@ struct RenWindow {
   SDL_Window *window;
   SDL_Renderer *renderer;
   RenSurface rensurface;
+  int scale;
 };
 typedef struct RenWindow RenWindow;
 
