@@ -5,8 +5,18 @@ CXX="${CXX:-g++}"
 
 BUILD_TYPE=Release
 
+# By default, using tdm-gcc
+# _WIN32_WINNT is defined to 0x0502, but WINVER and NTDDI_VERSION are not defined
+
+# With GCC 13.2.0 from MSYS2:
+# _WIN32_WINNT is defined to 0x0601, but WINVER and NTDDI_VERSION are not defined
+
 if [[ "$OSTYPE" == "msys" ]]; then
-    # On Windows we use Lua with the utf8 patch
+    # On Windows we use Lua with the utf8 patch, we need WINVER at least 0x0601
+    # https://learn.microsoft.com/en-us/cpp/porting/modifying-winver-and-win32-winnt?view=msvc-170
+    CWINDEFS="-DWINVER=0x0601 -D_WIN32_WINNT=0x0601 -DNTDDI_VERSION=0x06010000"
+    CC="$CC $CWINDEFS"
+    CXX="$CXX $CWINDEFS"
     packages=(pcre2 freetype2 "sdl2 -threads -opengl -render -loadso" "lua -utf8")
 elif [[ "$OSTYPE" == "linux"* || "$OSTYPE" == "freebsd"* ]]; then
     # On linux opengl and render is not needed

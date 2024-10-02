@@ -1,8 +1,11 @@
 #if _WIN32
   // https://devblogs.microsoft.com/commandline/windows-command-line-introducing-the-windows-pseudo-console-conpty/
   #if __MINGW32__ || __MINGW64__ // https://stackoverflow.com/questions/66419746/is-there-support-for-winpty-in-mingw-w64
-    #define NTDDI_VERSION 0x0A000006 //NTDDI_WIN10_RS5
     #undef _WIN32_WINNT
+    #undef WINVER
+    #undef NTDDI_VERSION
+    #define NTDDI_VERSION 0x0A000006 //NTDDI_WIN10_RS5
+    #define WINVER 0x0A00
     #define _WIN32_WINNT 0x0A00 // _WIN32_WINNT_WIN10
   #endif
   #include <windows.h>
