@@ -439,19 +439,21 @@ function RootView:draw_grabbed_tab()
   local x = self.mouse.x - w / 2
   local y = self.mouse.y - h / 2
   local view = dn.node.views[dn.idx]
+  self:set_surface_for("dragged_tab", x, y, w, h)
   self.root_node:draw_tab(view, true, true, false, x, y, w, h, true)
 end
 
 
 function RootView:draw_drag_overlay(ov)
   if ov.opacity > 0 then
-    renderer.draw_rect(ov.x, ov.y, ov.w, ov.h, ov.color)
+    renderer.render_fill_rect(ov.x, ov.y, ov.w, ov.h, ov.color)
   end
 end
 
 
 function RootView:draw()
   self.root_node:draw()
+  renderer.set_render_clip_rect() -- reset the viewport to the entire window
   while #self.deferred_draws > 0 do
     local t = table.remove(self.deferred_draws)
     t.fn(table.unpack(t))

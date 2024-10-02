@@ -194,7 +194,8 @@ top:
         lua_pushinteger(L, e.window.data2);
         return 3;
       } else if (e.window.event == SDL_WINDOWEVENT_EXPOSED) {
-        rencache_invalidate(rencache);
+        // RenSurface *rs = renwin_get_surface(&window_renderer);
+        // rencache_invalidate(&rs->rencache);
         lua_pushstring(L, "exposed");
         return 1;
       } else if (e.window.event == SDL_WINDOWEVENT_MINIMIZED) {

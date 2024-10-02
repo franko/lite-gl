@@ -1,51 +1,10 @@
 local core = require "core"
 local config = require "core.config"
 local common = require "core.common"
+local style = require "core.style"
 local Object = require "core.object"
 local Scrollbar = require "core.scrollbar"
 
----@class core.view.position
----@field x number
----@field y number
-
----@class core.view.scroll
----@field x number
----@field y number
----@field to core.view.position
-
----@class core.view.thumbtrack
----@field thumb number
----@field track number
-
----@class core.view.thumbtrackwidth
----@field thumb number
----@field track number
----@field to core.view.thumbtrack
-
----@class core.view.scrollbar
----@field x core.view.thumbtrack
----@field y core.view.thumbtrack
----@field w core.view.thumbtrackwidth
----@field h core.view.thumbtrack
-
----@alias core.view.cursor "'arrow'" | "'ibeam'" | "'sizeh'" | "'sizev'" | "'hand'"
-
----@alias core.view.mousebutton "'left'" | "'right'"
-
----@alias core.view.context "'application'" | "'session'"
-
----Base view.
----@class core.view : core.object
----@field context core.view.context
----@field super core.object
----@field position core.view.position
----@field size core.view.position
----@field scroll core.view.scroll
----@field cursor core.view.cursor
----@field scrollable boolean
----@field v_scrollbar core.scrollbar
----@field h_scrollbar core.scrollbar
----@field current_scale number
 local View = Object:extend()
 
 -- context can be "application" or "session". The instance of objects
@@ -59,10 +18,62 @@ function View:new()
   self.scroll = { x = 0, y = 0, to = { x = 0, y = 0 } }
   self.cursor = "arrow"
   self.scrollable = false
-  self.v_scrollbar = Scrollbar({direction = "v", alignment = "e"})
-  self.h_scrollbar = Scrollbar({direction = "h", alignment = "e"})
+  self.v_scrollbar = Scrollbar(self, {direction = "v", alignment = "e"})
+  self.h_scrollbar = Scrollbar(self, {direction = "h", alignment = "e"})
   self.current_scale = SCALE
+
+  -- drawing surfaces variables
+  -- name_surfaces is used to store and persist drawing surfaces. The keys are
+  -- strings that must be unique only within the view instance.
+  self.named_surfaces = { }
+
+  -- array of surfaces that needs to be rendered at the end of the draw() function
+  self.surface_to_draw = { }
 end
+
+
+-- add the surface to the list to be rendered on the screen
+function View:set_surface_to_draw(surface)
+  table.insert(self.surface_to_draw, surface)
+end
+
+
+-- select a surface from a list, create one and add to it if it doesn't exist.
+-- adjust the size if it does not match with the existing surface.
+-- ensure the surface is associated with the given position
+function View.surface_from_list(surface_list, id, x, y, w, h)
+  local surface = surface_list[id]
+  local surf_x, surf_y, surf_w, surf_h
+  if surface then
+    surf_x, surf_y, surf_w, surf_h = surface:get_rect()
+  end
+  if not surface or surf_w ~= w or surf_h ~= h then
+    -- if we have no surface or the size does not match create a new one under the same id
+    surface = renderer.surface.create(x, y, w, h)
+    surface_list[id] = surface
+  elseif surf_x ~= x or surf_y ~= y then
+    -- here we may call set_position() unconditionally
+    surface:set_position(x, y)
+  end
+  return surface
+end
+
+
+function View:set_surface_for(name, x, y, w, h, background)
+  local surface = View.surface_from_list(self.named_surfaces, name, x, y, w, h)
+  renderer.set_current_surface(surface)
+  renderer.begin_frame(surface, background or style.background)
+  self:set_surface_to_draw(surface)
+end
+
+
+function View:present_surfaces()
+  for _, surface in ipairs(self.surface_to_draw) do
+    renderer.present_surface(surface)
+  end
+  self.surface_to_draw = { }
+end
+
 
 function View:move_towards(t, k, dest, rate, name)
   if type(t) ~= "table" then
@@ -245,8 +256,6 @@ function View:get_content_bounds()
 end
 
 
----@return number x
----@return number y
 function View:get_content_offset()
   local x = common.round(self.position.x - self.scroll.x)
   local y = common.round(self.position.y - self.scroll.y)
@@ -287,14 +296,6 @@ function View:update()
   self:move_towards(self.scroll, "y", self.scroll.to.y, 0.3, "scroll")
   if not self.scrollable then return end
   self:update_scrollbar()
-end
-
-
----@param color renderer.color
-function View:draw_background(color)
-  local x, y = self.position.x, self.position.y
-  local w, h = self.size.x, self.size.y
-  renderer.draw_rect(x, y, w, h, color)
 end
 
 

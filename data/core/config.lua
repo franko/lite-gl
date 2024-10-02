@@ -4,7 +4,7 @@ local config = {}
 
 config.fps = 60
 config.max_log_items = 800
-config.message_timeout = 5
+config.message_timeout = 2.5
 config.mouse_wheel_scroll = 50 * SCALE
 config.animate_drag_scroll = false
 config.scroll_past_end = true

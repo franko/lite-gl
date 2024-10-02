@@ -1108,14 +1108,14 @@ function core.push_clip_rect(x, y, w, h)
   b, r = math.min(b, b2), math.min(r, r2)
   w, h = r-x, b-y
   table.insert(core.clip_rect_stack, { x, y, w, h })
-  renderer.set_clip_rect(x, y, w, h)
+  renderer.set_render_clip_rect(x, y, w, h)
 end
 
 
 function core.pop_clip_rect()
   table.remove(core.clip_rect_stack)
   local x, y, w, h = table.unpack(core.clip_rect_stack[#core.clip_rect_stack])
-  renderer.set_clip_rect(x, y, w, h)
+  renderer.set_render_clip_rect(x, y, w, h)
 end
 
 
@@ -1182,6 +1182,19 @@ function core.custom_log(level, show, backtrace, fmt, ...)
   if #core.log_items > config.max_log_items then
     table.remove(core.log_items, 1)
   end
+
+  -- Write log message to file
+  local log_file = io.open("lite_xl_debug.log", "a")
+  if log_file then
+    local log_entry = string.format("[%s] %s: %s at %s\n", 
+      os.date("%Y-%m-%d %H:%M:%S"), level, text, at)
+    log_file:write(log_entry)
+    if backtrace then
+      log_file:write(item.info .. "\n")
+    end
+    log_file:close()
+  end
+
   return item
 end
 
@@ -1342,11 +1355,9 @@ function core.step()
   end
 
   -- draw
-  renderer.begin_frame()
   core.clip_rect_stack[1] = { 0, 0, width, height }
-  renderer.set_clip_rect(table.unpack(core.clip_rect_stack[1]))
   core.root_view:draw()
-  renderer.end_frame()
+  renderer.present_window()
   return true
 end
 

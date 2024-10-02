@@ -167,7 +167,7 @@ end
 -- this is just to get a date string that's consistent
 local datestr = os.date()
 function LogView:draw()
-  self:draw_background(style.background)
+  self:set_surface_for("logview", self.position.x, self.position.y, self.position.x + self.size.x, self.position.y + self.size.y, style.background)
 
   local th = style.font:get_height()
   local lh = th + style.padding.y -- for one line
@@ -220,6 +220,7 @@ function LogView:draw()
     end
   end
   LogView.super.draw_scrollbar(self)
+  self:present_surfaces()
 end
 
 

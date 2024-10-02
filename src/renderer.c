@@ -15,6 +15,7 @@
 #endif
 
 #include "renderer.h"
+#include "rensurface.h"
 #include "renwindow.h"
 
 #define MAX_UNICODE 0x100000
@@ -270,7 +271,7 @@ RenFont* ren_font_load(RenWindow *window_renderer, const char* path, float size,
   if (FT_Open_Face(library, &(FT_Open_Args){ .flags = FT_OPEN_STREAM, .stream = &font->stream }, 0, &face))
     goto failure;
 
-  const int surface_scale = renwin_get_surface(window_renderer).scale;
+  const int surface_scale = window_renderer->scale;
   const float scaled_size = roundf(size * surface_scale);
   if (FT_Set_Pixel_Sizes(face, 0, scaled_size))
     goto failure;
@@ -358,7 +359,7 @@ float ren_font_group_get_size(RenFont **fonts) {
 }
 
 void ren_font_group_set_size(RenWindow *window_renderer, RenFont **fonts, float size) {
-  const int surface_scale = renwin_get_surface(window_renderer).scale;
+  const int surface_scale = window_renderer->scale;
   for (int i = 0; i < FONT_FALLBACK_MAX && fonts[i]; ++i) {
     font_clear_glyph_cache(fonts[i]);
     FT_Face face = fonts[i]->face;
@@ -408,6 +409,7 @@ double ren_font_group_get_width(RenFont **fonts, const char *text, size_t len, i
 
 double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t len, float x, int y, RenColor color) {
   SDL_Surface *surface = rs->surface;
+  if (!surface) return x + 1.0; // FIXME
   SDL_Rect clip;
   SDL_GetClipRect(surface, &clip);
 
@@ -499,18 +501,9 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
 }
 
 /******************* Rectangles **********************/
-static inline RenColor blend_pixel(RenColor dst, RenColor src) {
-  int ia = 0xff - src.a;
-  dst.r = ((src.r * src.a) + (dst.r * ia)) >> 8;
-  dst.g = ((src.g * src.a) + (dst.g * ia)) >> 8;
-  dst.b = ((src.b * src.a) + (dst.b * ia)) >> 8;
-  return dst;
-}
-
 void ren_draw_rect(RenSurface *rs, RenRect rect, RenColor color) {
-  if (color.a == 0) { return; }
-
   SDL_Surface *surface = rs->surface;
+  if (color.a == 0 || !surface) { return; }
   const int surface_scale = rs->scale;
 
   SDL_Rect dest_rect = { rect.x * surface_scale,
@@ -549,36 +542,21 @@ void ren_init(SDL_Window *win) {
     return;
   }
   window_renderer.window = win;
-  renwin_init_surface(&window_renderer);
-  renwin_clip_to_surface(&window_renderer);
+  renwin_init_renderer(&window_renderer);
+  // renwin_clip_to_surface(&window_renderer);
   draw_rect_surface = SDL_CreateRGBSurface(0, 1, 1, 32,
                        0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
 }
 
 
 void ren_resize_window(RenWindow *window_renderer) {
-  renwin_resize_surface(window_renderer);
-}
-
-
-void ren_update_rects(RenWindow *window_renderer, RenRect *rects, int count) {
-  static bool initial_frame = true;
-  if (initial_frame) {
-    renwin_show_window(window_renderer);
-    initial_frame = false;
-  }
-  rensurf_update_rects(&window_renderer->rensurface, rects, count);
-  renwin_render_surface(window_renderer);
+  renwin_resize_window(window_renderer);
 }
 
 
 void ren_set_clip_rect(RenSurface *rs, RenRect rect) {
+  if (!rs->surface) return;
   RenRect sr = scaled_rect(rect, rs->scale);
   SDL_SetClipRect(rs->surface, &(SDL_Rect){.x = sr.x, .y = sr.y, .w = sr.width, .h = sr.height});
 }
 
-
-void ren_get_size(RenSurface *rs, int *x, int *y) {
-  *x = rs->surface->w / rs->scale;
-  *y = rs->surface->h / rs->scale;
-}

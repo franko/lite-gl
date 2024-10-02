@@ -6,113 +6,19 @@ local style = require "core.style"
 local DocView = require "core.docview"
 local CommandView = require "core.commandview"
 local LogView = require "core.logview"
-local View = require "core.view"
 local Object = require "core.object"
+local TiledView = require "core.tiledview"
 
+local StatusView = TiledView:extend()
 
----@alias core.statusview.styledtext table<integer, renderer.font|renderer.color|string>
----@alias core.statusview.position '"left"' | '"right"'
-
----A status bar implementation for lite, check core.status_view.
----@class core.statusview : core.view
----@field super core.view
----@field items core.statusview.item[]
----@field active_items core.statusview.item[]
----@field hovered_item core.statusview.item
----@field message_timeout number
----@field message core.statusview.styledtext
----@field tooltip_mode boolean
----@field tooltip core.statusview.styledtext
----@field left_width number
----@field right_width number
----@field r_left_width number
----@field r_right_width number
----@field left_xoffset number
----@field right_xoffset number
----@field dragged_panel '""' | core.statusview.position
----@field hovered_panel '""' | core.statusview.position
----@field hide_messages boolean
-local StatusView = View:extend()
-
----Space separator
----@type string
 StatusView.separator  = "      "
-
----Pipe separator
----@type string
 StatusView.separator2 = "   |   "
 
----@alias core.statusview.item.separator
----|>`StatusView.separator`
----| `StatusView.separator2`
-
----@alias core.statusview.item.predicate fun():boolean
----@alias core.statusview.item.onclick fun(button: string, x: number, y: number)
----@alias core.statusview.item.get_item fun(self: core.statusview.item):core.statusview.styledtext?,core.statusview.styledtext?
----@alias core.statusview.item.ondraw fun(x, y, h, hovered: boolean, calc_only?: boolean):number
-
----@class core.statusview.item : core.object
----@field name string
----@field predicate core.statusview.item.predicate
----@field alignment core.statusview.item.alignment
----@field tooltip string
----@field command string | nil @Command to perform when the item is clicked.
----Function called when item is clicked and no command is set.
----@field on_click core.statusview.item.onclick | nil
----Custom drawing that when passed calc true should return the needed width for
----drawing and when false should draw.
----@field on_draw core.statusview.item.ondraw | nil
----@field background_color renderer.color | nil
----@field background_color_hover renderer.color | nil
----@field visible boolean
----@field separator core.statusview.item.separator
----@field active boolean
----@field x number
----@field w number
----@field cached_item core.statusview.styledtext
 local StatusViewItem = Object:extend()
 
----Available StatusViewItem options.
----@class core.statusview.item.options : table
----A condition to evaluate if the item should be displayed. If a string
----is given it is treated as a require import that should return a valid object
----which is checked against the current active view, the sames applies if a
----table is given. A function that returns a boolean can be used instead to
----perform a custom evaluation, setting to nil means always evaluates to true.
----@field predicate string | table | core.statusview.item.predicate
----A unique name to identify the item on the status bar.
----@field name string @A unique name to identify the item on the status bar.
----@field alignment core.statusview.item.alignment
----A function that should return a core.statusview.styledtext element,
----returning an empty table is allowed.
----@field get_item core.statusview.item.get_item
----The name of a valid registered command or a callback function to execute
----when the item is clicked.
----@field command string | core.statusview.item.onclick | nil
----The position in which to insert the given item on the internal table,
----a value of -1 inserts the item at the end which is the default. A value
----of 1 will insert the item at the beggining.
----@field position? integer
----@field tooltip? string @Text displayed when mouse hovers the item.
----@field visible boolean @Flag to show or hide the item
----The type of separator rendered to the right of the item if another item
----follows it.
----@field separator? core.statusview.item.separator
-
----Flag to tell the item should me aligned on left side of status bar.
----@type integer
-StatusViewItem.LEFT = 1
-
----Flag to tell the item should me aligned on right side of status bar.
----@type integer
+StatusViewItem.LEFT  = 1
 StatusViewItem.RIGHT = 2
 
----@alias core.statusview.item.alignment
----|>`StatusView.Item.LEFT`
----| `StatusView.Item.RIGHT`
-
----Constructor
----@param options core.statusview.item.options
 function StatusViewItem:new(options)
   self:set_predicate(options.predicate)
   self.name = options.name
@@ -133,7 +39,6 @@ end
 
 ---Called by the status bar each time that the item needs to be rendered,
 ---if on_draw() is set this function is obviated.
----@return core.statusview.styledtext
 function StatusViewItem:get_item() return {} end
 
 ---Do not show the item on the status bar.
@@ -147,17 +52,14 @@ function StatusViewItem:show() self.visible = true end
 ---which is checked against the current active view, the sames applies if a
 ---table is given. A function that returns a boolean can be used instead to
 ---perform a custom evaluation, setting to nil means always evaluates to true.
----@param predicate string | table | core.statusview.item.predicate
 function StatusViewItem:set_predicate(predicate)
   self.predicate = command.generate_predicate(predicate)
 end
 
----@type core.statusview.item
 StatusView.Item = StatusViewItem
 
 
 ---Predicated used on the default docview widgets.
----@return boolean
 local function predicate_docview()
   return  core.active_view:is(DocView)
     and not core.active_view:is(CommandView)
@@ -185,6 +87,8 @@ function StatusView:new()
   self.hovered_panel = ""
   self.hide_messages = false
   self.visible = true
+  self.tiles_height = 0
+  self.tiles_width = 800
 
   self:register_docview_items()
   self:register_command_items()
@@ -316,10 +220,6 @@ end
 
 
 ---Set a position to the best match according to total available items.
----@param self core.statusview
----@param position integer
----@param alignment core.statusview.item.alignment
----@return integer position
 local function normalize_position(self, position, alignment)
   local offset = 0
   local items_count = 0
@@ -348,11 +248,8 @@ end
 
 
 ---Adds an item to be rendered in the status bar.
----@param options core.statusview.item.options
----@return core.statusview.item
 function StatusView:add_item(options)
   assert(self:get_item(options.name) == nil, "status item already exists: " .. options.name)
-  ---@type core.statusview.item
   local item = StatusView.Item(options)
   table.insert(self.items, normalize_position(self, options.position or -1, options.alignment), item)
   return item
@@ -360,8 +257,6 @@ end
 
 
 ---Get an item object associated to a name or nil if not found.
----@param name string
----@return core.statusview.item | nil
 function StatusView:get_item(name)
   for _, item in ipairs(self.items) do
     if item.name == name then return item end
@@ -371,8 +266,6 @@ end
 
 
 ---Get a list of items.
----@param alignment? core.statusview.item.alignment
----@return core.statusview.item[]
 function StatusView:get_items_list(alignment)
   if alignment then
     local items = {}
@@ -388,10 +281,6 @@ end
 
 
 ---Move an item to a different position.
----@param name string
----@param position integer Can be negative value to position in reverse order
----@param alignment? core.statusview.item.alignment
----@return boolean moved
 function StatusView:move_item(name, position, alignment)
   assert(name, "no name provided")
   assert(position, "no position provided")
@@ -415,8 +304,6 @@ end
 
 
 ---Remove an item from the status view.
----@param name string
----@return core.statusview.item removed_item
 function StatusView:remove_item(name)
   local item = nil
   for pos, it in ipairs(self.items) do
@@ -463,7 +350,6 @@ end
 
 
 ---Hides the given items from the status view or all if no names given.
----@param names? table<integer, string> | string
 function StatusView:hide_items(names)
   if type(names) == "string" then
     names = {names}
@@ -482,7 +368,6 @@ end
 
 
 ---Shows the given items from the status view or all if no names given.
----@param names? table<integer, string> | string
 function StatusView:show_items(names)
   if type(names) == "string" then
     names = {names}
@@ -501,9 +386,6 @@ end
 
 
 ---Shows a message for a predefined amount of time.
----@param icon string
----@param icon_color renderer.color
----@param text string
 function StatusView:show_message(icon, icon_color, text)
   if not self.visible or self.hide_messages then return end
   self.message = {
@@ -515,7 +397,6 @@ end
 
 
 ---Enable or disable system wide messages on the status bar.
----@param enable boolean
 function StatusView:display_messages(enable)
   self.hide_messages = not enable
 end
@@ -523,7 +404,6 @@ end
 
 ---Activates tooltip mode displaying only the given
 ---text until core.statusview:remove_tooltip() is called.
----@param text string | core.statusview.styledtext
 function StatusView:show_tooltip(text)
   self.tooltip = type(text) == "table" and text or { text }
   self.tooltip_mode = true
@@ -537,11 +417,6 @@ end
 
 
 ---Helper function to draw the styled text.
----@param self core.statusview
----@param items core.statusview.styledtext
----@param x number
----@param y number
----@param draw_fn fun(font,color,text,align, x,y,w,h):number
 local function draw_items(self, items, x, y, draw_fn)
   local font = style.font
   local color = style.text
@@ -562,36 +437,29 @@ end
 
 ---Helper function to calculate the width of text by using it as part of
 ---the helper function draw_items().
----@param font renderer.font
----@param text string
----@param x number
 local function text_width(font, _, text, _, x)
   return x + font:get_width(text)
 end
 
 
 ---Draws a table of styled text on the status bar starting on the left or right.
----@param items core.statusview.styledtext
----@param right_align? boolean
----@param xoffset? number
----@param yoffset? number
 function StatusView:draw_items(items, right_align, xoffset, yoffset)
   local x, y = self:get_content_offset()
   x = x + (xoffset or 0)
   y = y + (yoffset or 0)
+  local draw_justified_text = function(...) return self:draw_justified_text(...) end
   if right_align then
     local w = draw_items(self, items, 0, 0, text_width)
     x = x + self.size.x - w - style.padding.x
-    draw_items(self, items, x, y, common.draw_text)
+    draw_items(self, items, x, y, draw_justified_text)
   else
     x = x + style.padding.x
-    draw_items(self, items, x, y, common.draw_text)
+    draw_items(self, items, x, y, draw_justified_text)
   end
 end
 
 
 ---Draw the tooltip of a given status bar item.
----@param item core.statusview.item
 function StatusView:draw_item_tooltip(item)
   core.root_view:defer_draw(function()
     local text = item.tooltip
@@ -604,13 +472,10 @@ function StatusView:draw_item_tooltip(item)
       x = self.size.x - w - (style.padding.x * 3)
     end
 
-    renderer.draw_rect(
-      x + style.padding.x,
-      self.position.y - h - (style.padding.y * 2),
-      w + (style.padding.x * 2),
-      h + (style.padding.y * 2),
-      style.background3
-    )
+    local bx, by = x + style.padding.x, self.position.y - h - (style.padding.y * 2)
+    local bw, bh = w + (style.padding.x * 2), h + (style.padding.y * 2)
+
+    self:set_surface_for("tooltip", bx, by, bw, bh, style.background3)
 
     renderer.draw_text(
       style.font,
@@ -625,10 +490,6 @@ end
 
 ---Older method of retrieving the status bar items and which is now
 ---deprecated in favour of core.status_view:add_item().
----@deprecated
----@param nowarn boolean
----@return table left
----@return table right
 function StatusView:get_items(nowarn)
   if not nowarn and not self.get_items_warn then
     core.warn(
@@ -642,8 +503,6 @@ end
 
 
 ---Helper function to copy a styled text table into another.
----@param t1 core.statusview.styledtext
----@param t2 core.statusview.styledtext
 local function table_add(t1, t2)
   for _, value in ipairs(t2) do
     table.insert(t1, value)
@@ -652,9 +511,6 @@ end
 
 
 ---Helper function to merge deprecated items to a temp items table.
----@param destination table
----@param items core.statusview.styledtext
----@param alignment core.statusview.item.alignment
 local function merge_deprecated_items(destination, items, alignment)
   local start = true
   local items_start, items_end = {}, {}
@@ -690,13 +546,7 @@ end
 
 
 ---Append a space item into the given items list.
----@param self core.statusview
----@param destination core.statusview.item[]
----@param separator string
----@param alignment core.statusview.item.alignment
----@return core.statusview.item
 local function add_spacing(self, destination, separator, alignment, x)
-  ---@type core.statusview.item
   local space = StatusView.Item({name = "space", alignment = alignment})
   space.cached_item = separator == self.separator and {
     style.text, separator
@@ -713,8 +563,6 @@ end
 
 
 ---Remove starting and ending separators.
----@param self core.statusview
----@param styled_text core.statusview.styledtext
 local function remove_spacing(self, styled_text)
   if
     not Object.is(styled_text[1], renderer.font)
@@ -874,8 +722,6 @@ end
 
 
 ---Drag the given panel if possible.
----@param panel core.statusview.position
----@param dx number
 function StatusView:drag_panel(panel, dx)
   if panel == "left" and self.r_left_width > self.left_width then
     local nonvisible_w = self.r_left_width - self.left_width
@@ -902,9 +748,6 @@ end
 
 
 ---Return the currently hovered panel or empty string if none.
----@param x number
----@param y number
----@return string
 function StatusView:get_hovered_panel(x, y)
   if y >= self.position.y and x <= self.left_width + style.padding.x then
     return "left"
@@ -913,9 +756,6 @@ function StatusView:get_hovered_panel(x, y)
 end
 
 
----@param item core.statusview.item
----@return number x
----@return number w
 function StatusView:get_item_visible_area(item)
   local item_ox = item.alignment == StatusView.Item.LEFT and
     self.left_xoffset or self.right_xoffset
@@ -1054,6 +894,11 @@ function StatusView:on_mouse_wheel(y, x)
 end
 
 
+function StatusView:get_height()
+  return style.font:get_height() + style.padding.y * 2;
+end
+
+
 function StatusView:update()
   if not self.visible and self.size.y <= 0 then
     return
@@ -1062,7 +907,8 @@ function StatusView:update()
     return
   end
 
-  local height = style.font:get_height() + style.padding.y * 2;
+  local height = self:get_height();
+  self.tiles_height = height
 
   if self.size.y + 1 < height then
     self:move_towards(self.size, "y", height, nil, "statusbar")
@@ -1083,10 +929,6 @@ end
 
 
 ---Retrieve the hover status and proper background color if any.
----@param self core.statusview
----@param item core.statusview.item
----@return boolean is_hovered
----@return renderer.color | nil color
 local function get_item_bg_color(self, item)
   local hovered = self.hovered_item == item
 
@@ -1100,7 +942,8 @@ end
 function StatusView:draw()
   if not self.visible and self.size.y <= 0 then return end
 
-  self:draw_background(style.background2)
+  self:setup_tiles_for_drawing()
+  self:activate_tiles(style.background2)
 
   if self.message and system.get_time() <= self.message_timeout then
     self:draw_items(self.message, false, 0, self.size.y)
@@ -1119,7 +962,7 @@ function StatusView:draw()
         local hovered, item_bg = get_item_bg_color(self, item)
         if item.alignment == StatusView.Item.LEFT and not self.tooltip_mode then
           if type(item_bg) == "table" then
-            renderer.draw_rect(
+            self:draw_rect(
               item_x, self.position.y,
               item.w, self.size.y, item_bg
             )
@@ -1145,7 +988,7 @@ function StatusView:draw()
         local hovered, item_bg = get_item_bg_color(self, item)
         if item.alignment == StatusView.Item.RIGHT then
           if type(item_bg) == "table" then
-            renderer.draw_rect(
+            self:draw_rect(
               item_x, self.position.y,
               item.w, self.size.y, item_bg
             )
@@ -1167,6 +1010,7 @@ function StatusView:draw()
       end
     end
   end
+  self:present_surfaces()
 end
 
 return StatusView

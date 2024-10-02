@@ -3,9 +3,9 @@ local core = require "core"
 local common = require "core.common"
 local command = require "core.command"
 local style = require "core.style"
-local View = require "core.view"
+local TiledView = require "core.tiledview"
 
-local ToolbarView = View:extend()
+local ToolbarView = TiledView:extend()
 
 
 function ToolbarView:new()
@@ -22,11 +22,18 @@ function ToolbarView:new()
     {symbol = "B", command = "core:find-command"},
     {symbol = "P", command = "core:open-user-module"},
   }
+  self.tiles_height = self:get_height()
+end
+
+
+function ToolbarView:get_height()
+  return self.toolbar_font:get_height() + style.padding.y * 2
 end
 
 
 function ToolbarView:update()
-  local dest_size = self.visible and (self.toolbar_font:get_height() + style.padding.y * 2) or 0
+  self.tiles_height = self:get_height()
+  local dest_size = self.visible and self.tiles_height or 0
   if self.init_size then
     self.size.y = dest_size
     self.init_size = nil
@@ -79,12 +86,15 @@ end
 
 function ToolbarView:draw()
   if not self.visible then return end
-  self:draw_background(style.background2)
+
+  self:setup_tiles_for_drawing()
+  self:activate_tiles(style.background)
 
   for item, x, y, w, h in self:each_item() do
     local color = item == self.hovered_item and command.is_valid(item.command) and style.text or style.dim
-    common.draw_text(self.toolbar_font, color, item.symbol, nil, x, y, 0, h)
+    self:draw_justified_text(self.toolbar_font, color, item.symbol, nil, x, y, 0, h)
   end
+  self:present_surfaces()
 end
 
 

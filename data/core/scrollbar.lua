@@ -27,7 +27,8 @@ local Scrollbar = Object:extend()
 ---@field contracted_size number? @Override the default value specified by `style.scrollbar_size`
 
 ---@param options ScrollbarOptions
-function Scrollbar:new(options)
+function Scrollbar:new(view, options)
+  self.view = view -- parent's view
   ---Position information of the owner
   self.rect = {
     x = 0, y = 0, w = 0, h = 0,
@@ -62,6 +63,7 @@ function Scrollbar:new(options)
   self.contracted_size = options.contracted_size
   ---@type number? @Override the default value specified by `style.scrollbar_size`
   self.expanded_size = options.expanded_size
+  self.generic_name = self.direction .. "scrollbar"
 end
 
 
@@ -122,7 +124,7 @@ function Scrollbar:_get_thumb_rect_normal()
   return
     nr.across + nr.across_size - across_size,
     nr.along + self.percent * nr.scrollable * (nr.along_size - along_size) / (sz - nr.along_size),
-    across_size,
+    expanded_scrollbar_size,
     along_size
 end
 
@@ -146,7 +148,7 @@ function Scrollbar:_get_track_rect_normal()
   return
     nr.across + nr.across_size - across_size,
     nr.along,
-    across_size,
+    expanded_scrollbar_size,
     nr.along_size
 end
 
@@ -335,6 +337,9 @@ end
 
 ---Draw both the scrollbar track and thumb
 function Scrollbar:draw()
+  local x, y, w, h = self:get_track_rect()
+  if w == 0 or h == 0 then return end
+  self.view:set_surface_for(self.generic_name, x, y, w, h)
   self:draw_track()
   self:draw_thumb()
 end

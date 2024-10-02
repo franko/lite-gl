@@ -42,11 +42,12 @@ local function draw_text(x, y, color)
 end
 
 function EmptyView:draw()
-  self:draw_background(style.background)
+  self:set_surface_for("empty", self.position.x, self.position.y, self.size.x, self.size.y, style.background)
   local w, h = draw_text(0, 0, { 0, 0, 0, 0 })
   local x = self.position.x + math.max(style.padding.x, (self.size.x - w) / 2)
   local y = self.position.y + (self.size.y - h) / 2
   draw_text(x, y, style.dim)
+  self:present_surfaces()
 end
 
 return EmptyView

@@ -5,13 +5,16 @@ local style = require "core.style"
 local keymap = require "core.keymap"
 local translate = require "core.doc.translate"
 local ime = require "core.ime"
-local View = require "core.view"
+local TiledView = require "core.tiledview"
 
----@class core.docview : core.view
----@field super core.view
-local DocView = View:extend()
+local TILE_CHARACTERS, TILE_LINES = 80, 40
+
+-- DocView inherits from TiledView to display the document's text
+-- content. The gutter is drawn separately using specific methods.
+local DocView = TiledView:extend()
 
 DocView.context = "session"
+
 
 local function move_to_line_offset(dv, line, col, offset)
   local xo = dv.last_x_offset
@@ -21,6 +24,55 @@ local function move_to_line_offset(dv, line, col, offset)
   xo.line = line + offset
   xo.col = dv:get_x_offset_col(line + offset, xo.offset)
   return xo.line, xo.col
+end
+
+
+local function gutter_tile_id(tile_1)
+  return ":" .. tile_1
+end
+
+
+function DocView:clear_unused_tiles()
+  for id in pairs(self.named_surfaces) do
+    if string.match(id, "^:") and not self.used_tiles_ids[id] then
+      self.named_surfaces[id] = nil
+    end
+  end
+end
+
+
+function DocView:setup_tiles_for_drawing()
+  local lh = self:get_line_height()
+  local cw = math.ceil(self:get_font():get_width(' '))
+  local metric = self.tiles_metric
+  metric.gutter_width, metric.gutter_padding = self:get_gutter_width()
+  metric.line_height = lh
+  -- Note that get_content_body_offset need metric.gutter_width to be set
+  metric.x, metric.y = self:get_content_body_offset()
+  metric.w, metric.h = cw * TILE_CHARACTERS, lh * TILE_LINES
+  self.used_tiles_ids = { }
+end
+
+
+function DocView:activate_gutter_tiles_for_region(y1, y2, background)
+  local x, y = self:get_gutter_content_offset()
+  local w, h = self.tiles_metric.gutter_width, self.tiles_metric.h
+  local j1, j2 = math.floor((y1 - y) / h) + 1, math.floor((y2 - 1 - y) / h) + 1
+  for j = j1, j2 do
+    self:prepare_tile(gutter_tile_id(j), x, y + (j - 1) * h, w, h, background)
+  end
+end
+
+
+function DocView:get_content_body_offset()
+  local x, y = self:get_content_offset()
+  return x + self.tiles_metric.gutter_width, y + style.padding.y
+end
+
+
+function DocView:get_gutter_content_offset()
+  local x, y = self:get_content_offset()
+  return x, y + style.padding.y
 end
 
 
@@ -64,6 +116,12 @@ function DocView:new(doc)
   self.ime_selection = { from = 0, size = 0 }
   self.ime_status = false
   self.hovering_gutter = false
+  self.tiles_metric = {
+    x = 0, y = 0, w = 0, h = 0,
+    line_height = 0, gutter_width = 0, gutter_padding = 0,
+    limits = { x1 = 0, y1 = 0, x2 = 0, y2 = 0 }
+  }
+  self.used_tiles_ids = { }
   self.v_scrollbar:set_forced_status(config.force_scrollbar_status)
   self.h_scrollbar:set_forced_status(config.force_scrollbar_status)
 end
@@ -134,27 +192,27 @@ end
 
 
 function DocView:get_gutter_width()
-  local padding = style.padding.x * 2
-  return self:get_font():get_width(#self.doc.lines) + padding, padding
+  local padding = math.floor(style.padding.x * 2 + 0.5)
+  return math.ceil(self:get_font():get_width(#self.doc.lines)) + padding, padding
 end
 
 
 function DocView:get_line_screen_position(line, col)
-  local x, y = self:get_content_offset()
-  local lh = self:get_line_height()
-  local gw = self:get_gutter_width()
-  y = y + (line-1) * lh + style.padding.y
+  local x, y = self.tiles_metric.x, self.tiles_metric.y
+  local lh = self.tiles_metric.line_height
+  y = y + (line-1) * lh
   if col then
-    return x + gw + self:get_col_x_offset(line, col), y
+    return x + self:get_col_x_offset(line, col), y
   else
-    return x + gw, y
+    return x, y
   end
 end
 
+
 function DocView:get_line_text_y_offset()
-  local lh = self:get_line_height()
+  local lh = self.tiles_metric.line_height
   local th = self:get_font():get_height()
-  return (lh - th) / 2
+  return math.floor((lh - th) / 2 + 0.5)
 end
 
 
@@ -231,9 +289,16 @@ function DocView:get_x_offset_col(line, x)
 end
 
 
+function DocView:resolve_line(y)
+  local yo = self.tiles_metric.y
+  local line = math.floor((y - yo) / self.tiles_metric.line_height) + 1
+  return common.clamp(line, 1, #self.doc.lines)
+end
+
+
 function DocView:resolve_screen_position(x, y)
   local ox, oy = self:get_line_screen_position(1)
-  local line = math.floor((y - oy) / self:get_line_height()) + 1
+  local line = math.floor((y - oy) / self.tiles_metric.line_height) + 1
   line = common.clamp(line, 1, #self.doc.lines)
   local col = self:get_x_offset_col(line, x - ox)
   return line, col
@@ -244,9 +309,8 @@ function DocView:scroll_to_line(line, ignore_if_visible, instant)
   local min, max = self:get_visible_line_range()
   if not (ignore_if_visible and line > min and line < max) then
     local x, y = self:get_line_screen_position(line)
-    local ox, oy = self:get_content_offset()
     local _, _, _, scroll_h = self.h_scrollbar:get_track_rect()
-    self.scroll.to.y = math.max(0, y - oy - (self.size.y - scroll_h) / 2)
+    self.scroll.to.y = math.max(0, y - (self.size.y - scroll_h) / 2)
     if instant then
       self.scroll.y = self.scroll.to.y
     end
@@ -260,7 +324,7 @@ function DocView:scroll_to_make_visible(line, col)
   local lh = self:get_line_height()
   local _, _, _, scroll_h = self.h_scrollbar:get_track_rect()
   self.scroll.to.y = common.clamp(self.scroll.to.y, ly - oy - self.size.y + scroll_h + lh * 2, ly - oy - lh)
-  local gw = self:get_gutter_width()
+  local gw = self.tiles_metric.gutter_width
   local xoffset = self:get_col_x_offset(line, col)
   local xmargin = 3 * self:get_font():get_width(' ')
   local xsup = xoffset + gw + xmargin
@@ -278,7 +342,7 @@ function DocView:on_mouse_moved(x, y, ...)
   DocView.super.on_mouse_moved(self, x, y, ...)
 
   self.hovering_gutter = false
-  local gw = self:get_gutter_width()
+  local gw = self.tiles_metric.gutter_width
 
   if self:scrollbar_hovering() or self:scrollbar_dragging() then
     self.cursor = "arrow"
@@ -429,9 +493,10 @@ function DocView:update()
 end
 
 
-function DocView:draw_line_highlight(x, y)
-  local lh = self:get_line_height()
-  renderer.draw_rect(x, y, self.size.x, lh, style.line_highlight)
+function DocView:draw_line_highlight(y)
+  local h = self.tiles_metric.line_height
+  local limits = self.tiles_metric.limits
+  self:draw_rect(limits.x1, y, limits.x2 - limits.x1, h, style.line_highlight)
 end
 
 
@@ -444,20 +509,21 @@ function DocView:draw_line_text(line, x, y)
   if string.sub(tokens[tokens_count], -1) == "\n" then
     last_token = tokens_count - 1
   end
+
   for tidx, type, text in self.doc.highlighter:each_token(line) do
     local color = style.syntax[type]
     local font = style.syntax_fonts[type] or default_font
     -- do not render newline, fixes issue #1164
     if tidx == last_token then text = text:sub(1, -2) end
-    tx = renderer.draw_text(font, text, tx, ty, color)
-    if tx > self.position.x + self.size.x then break end
+    tx = self:draw_text(font, text, tx, ty, color)
+    if tx > self.tiles_metric.limits.x2 then break end
   end
-  return self:get_line_height()
+  return self.tiles_metric.line_height
 end
 
 function DocView:draw_caret(x, y)
-    local lh = self:get_line_height()
-    renderer.draw_rect(x, y, style.caret_width, lh, style.caret)
+    local w, h = style.caret_width, self.tiles_metric.line_height
+    self:set_surface_for("cursor", x, y, w, h, style.caret)
 end
 
 function DocView:draw_line_body(line, x, y)
@@ -479,11 +545,11 @@ function DocView:draw_line_body(line, x, y)
     end
   end
   if draw_highlight and core.active_view == self then
-    self:draw_line_highlight(x + self.scroll.x, y)
+    self:draw_line_highlight(y)
   end
 
   -- draw selection if it overlaps this line
-  local lh = self:get_line_height()
+  local lh = self.tiles_metric.line_height
   for lidx, line1, col1, line2, col2 in self.doc:get_selections(true) do
     if line >= line1 and line <= line2 then
       local text = self.doc.lines[line]
@@ -492,7 +558,7 @@ function DocView:draw_line_body(line, x, y)
       local x1 = x + self:get_col_x_offset(line, col1)
       local x2 = x + self:get_col_x_offset(line, col2)
       if x1 ~= x2 then
-        renderer.draw_rect(x1, y, x2 - x1, lh, style.selection)
+        self:draw_rect(x1, y, x2 - x1, lh, style.selection)
       end
     end
   end
@@ -510,22 +576,31 @@ function DocView:draw_line_gutter(line, x, y, width)
       break
     end
   end
+  -- The code below should maybe grouped in a function like self:draw_text() but dedicated
+  -- to drawing the gutter's text
+  local font = self:get_font()
   x = x + style.padding.x
-  local lh = self:get_line_height()
-  common.draw_text(self:get_font(), color, line, "right", x, y, width, lh)
-  return lh
+  y = y + self:get_line_text_y_offset()
+  local tw = font:get_width(line)
+  local _, tile_j = self:get_tile_indexes(x, y)
+  local surface = self.named_surfaces[gutter_tile_id(tile_j)]
+  if surface then
+    renderer.set_current_surface(surface)
+    renderer.draw_text(font, line, x + (width - tw), y, color)
+  end
+  return self.tiles_metric.line_height
 end
 
 
 function DocView:draw_ime_decoration(line1, col1, line2, col2)
   local x, y = self:get_line_screen_position(line1)
   local line_size = math.max(1, SCALE)
-  local lh = self:get_line_height()
+  local lh = self.tiles_metric.line_height
 
   -- Draw IME underline
   local x1 = self:get_col_x_offset(line1, col1)
   local x2 = self:get_col_x_offset(line2, col2)
-  renderer.draw_rect(x + math.min(x1, x2), y + lh - line_size, math.abs(x1 - x2), line_size, style.text)
+  renderer.render_fill_rect(x + math.min(x1, x2), y + lh - line_size, math.abs(x1 - x2), line_size, style.text)
 
   -- Draw IME selection
   local col = math.min(col1, col2)
@@ -535,7 +610,7 @@ function DocView:draw_ime_decoration(line1, col1, line2, col2)
   if from ~= to then
     x2 = self:get_col_x_offset(line1, to)
     line_size = style.caret_width
-    renderer.draw_rect(x + math.min(x1, x2), y + lh - line_size, math.abs(x1 - x2), line_size, style.caret)
+    renderer.render_fill_rect(x + math.min(x1, x2), y + lh - line_size, math.abs(x1 - x2), line_size, style.caret)
   end
   self:draw_caret(x + x1, y)
 end
@@ -562,21 +637,38 @@ function DocView:draw_overlay()
   end
 end
 
+
 function DocView:draw()
-  self:draw_background(style.background)
+  self:setup_tiles_for_drawing()
+
   local _, indent_size = self.doc:get_indent_info()
   self:get_font():set_tab_size(indent_size)
 
-  local minline, maxline = self:get_visible_line_range()
-  local lh = self:get_line_height()
-
-  local x, y = self:get_line_screen_position(minline)
-  local gw, gpad = self:get_gutter_width()
-  for i = minline, maxline do
-    y = y + (self:draw_line_gutter(i, self.position.x, y, gpad and gw - gpad or gw) or lh)
-  end
+  local lh = self.tiles_metric.line_height
+  local gw, gpad = self.tiles_metric.gutter_width, self.tiles_metric.gutter_padding
+  local xo, yo = self.tiles_metric.x, self.tiles_metric.y
 
   local pos = self.position
+  local sx, sy = self.size.x, self.size.y
+  self:activate_gutter_tiles_for_region(pos.y + style.padding.y, pos.y + sy, style.background)
+  local x1, y1, x2, y2 = self:activate_tiles_for_region(pos.x + gw, pos.y + style.padding.y, pos.x + sx, pos.y + sy, style.background)
+
+  if y1 > pos.y then
+    local xb, yb = self:get_content_offset()
+    self:set_surface_for("ypad", xb, yb, self.size.x, style.padding.y, style.background)
+  end
+
+  local minline, maxline = self:resolve_line(y1), self:resolve_line(y2) - 1
+
+  local limits = self.tiles_metric.limits
+  limits.x1, limits.y1, limits.x2, limits.y2 = x1, y1, x2, y2
+
+  local _, y = self:get_line_screen_position(minline)
+  local x = math.floor(pos.x + 0.5)
+  for i = minline, maxline do
+    y = y + (self:draw_line_gutter(i, x, y, gpad and gw - gpad or gw) or lh)
+  end
+
   x, y = self:get_line_screen_position(minline)
   -- the clip below ensure we don't write on the gutter region. On the
   -- right side it is redundant with the Node's clip.
@@ -588,6 +680,7 @@ function DocView:draw()
   core.pop_clip_rect()
 
   self:draw_scrollbar()
+  self:present_surfaces()
 end
 
 
