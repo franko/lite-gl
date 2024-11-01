@@ -57,7 +57,7 @@ end
 
 function TreeView:set_target_size(axis, value)
   if axis == "x" then
-    self.target_size = value
+    self.target_size = math.floor(value + 0.5)
     return true
   end
 end
@@ -233,6 +233,7 @@ function TreeView:update()
     self.init_size = false
   else
     self:move_towards(self.size, "x", dest, nil, "treeview")
+    self.size.x = math.floor(self.size.x + 0.5)
   end
 
   if not self.visible then return end
