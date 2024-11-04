@@ -496,7 +496,9 @@ end
 function DocView:draw_line_highlight(y)
   local h = self.tiles_metric.line_height
   local limits = self.tiles_metric.limits
-  self:draw_rect(limits.x1, y, limits.x2 - limits.x1, h, style.line_highlight)
+  local line_size = math.max(1, SCALE)
+  renderer.render_fill_rect(limits.x1, y, limits.x2 - limits.x1, line_size, style.line_number)
+  renderer.render_fill_rect(limits.x1, y + h - line_size, limits.x2 - limits.x1, line_size, style.line_number)
 end
 
 
@@ -527,26 +529,6 @@ function DocView:draw_caret(x, y)
 end
 
 function DocView:draw_line_body(line, x, y)
-  -- draw highlight if any selection ends on this line
-  local draw_highlight = false
-  local hcl = config.highlight_current_line
-  if hcl ~= false then
-    for lidx, line1, col1, line2, col2 in self.doc:get_selections(false) do
-      if line1 == line then
-        if hcl == "no_selection" then
-          if (line1 ~= line2) or (col1 ~= col2) then
-            draw_highlight = false
-            break
-          end
-        end
-        draw_highlight = true
-        break
-      end
-    end
-  end
-  if draw_highlight and core.active_view == self then
-    self:draw_line_highlight(y)
-  end
 
   -- draw selection if it overlaps this line
   local lh = self.tiles_metric.line_height
@@ -618,12 +600,19 @@ end
 
 function DocView:draw_overlay()
   if core.active_view == self then
+    local hcl = config.highlight_current_line
+    local highlight_line = true
     local minline, maxline = self:get_visible_line_range()
     -- draw caret if it overlaps this line
     local T = config.blink_period
     for _, line1, col1, line2, col2 in self.doc:get_selections() do
       if line1 >= minline and line1 <= maxline
       and system.window_has_focus() then
+        if highlight_line and (hcl ~= "no_selection" or ((line1 == line2) and (col1 == col2))) then
+          local _, y = self:get_line_screen_position(line1)
+          self:draw_line_highlight(y)
+          highlight_line = false -- only highlight the first line
+        end
         if ime.editing then
           self:draw_ime_decoration(line1, col1, line2, col2)
         else
