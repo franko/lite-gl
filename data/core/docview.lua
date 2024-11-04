@@ -523,7 +523,7 @@ end
 
 function DocView:draw_caret(x, y)
     local w, h = style.caret_width, self.tiles_metric.line_height
-    self:set_surface_for("cursor", x, y, w, h, style.caret)
+    renderer.render_fill_rect(x, y, w, h, style.caret)
 end
 
 function DocView:draw_line_body(line, x, y)
@@ -676,10 +676,10 @@ function DocView:draw()
   for i = minline, maxline do
     y = y + (self:draw_line_body(i, x, y) or lh)
   end
-  self:draw_overlay()
   core.pop_clip_rect()
 
   self:draw_scrollbar()
+  core.root_view:defer_draw(self.draw_overlay, self)
   self:present_surfaces()
 end
 
