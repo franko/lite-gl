@@ -23,6 +23,7 @@ typedef struct RenCache {
     int rect_count;
     int x_origin, y_origin;
     bool show_debug;
+    bool frame_started;
 } RenCache;
 
 void rencache_init(RenCache *cache, int x_origin, int y_origin);

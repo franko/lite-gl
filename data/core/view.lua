@@ -44,6 +44,7 @@ end
 function View.surface_from_list(surface_list, id, x, y, w, h)
   local surface = surface_list[id]
   local surf_x, surf_y, surf_w, surf_h
+  local needs_drawing = false
   if surface then
     surf_x, surf_y, surf_w, surf_h = surface:get_rect()
   end
@@ -51,11 +52,12 @@ function View.surface_from_list(surface_list, id, x, y, w, h)
     -- if we have no surface or the size does not match create a new one under the same id
     surface = renderer.surface.create(x, y, w, h)
     surface_list[id] = surface
+    needs_drawing = true
   elseif surf_x ~= x or surf_y ~= y then
     -- here we may call set_position() unconditionally
     surface:set_position(x, y)
   end
-  return surface
+  return surface, needs_drawing
 end
 
 

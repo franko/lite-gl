@@ -37,12 +37,16 @@ end
 -- Draw the background of the surface.
 -- Set the surface to be renderer when present_surfaces() is called.
 -- Mark the tile as used.
-function TiledView:prepare_tile(tile_id, x, y, w, h, background)
-  local surface = self.surface_from_list(self.named_surfaces, tile_id, x, y, w, h)
-  renderer.set_current_surface(surface)
-  renderer.begin_frame(surface, background)
+function TiledView:prepare_tile(tile_id, x, y, w, h, background, present_only)
+  local surface, needs_drawing = self.surface_from_list(self.named_surfaces, tile_id, x, y, w, h)
+  if not present_only or needs_drawing then
+    renderer.set_current_surface(surface)
+    renderer.begin_frame(surface, background)
+  end
   self:set_surface_to_draw(surface)
   self.used_tiles_ids[tile_id] = surface
+  renderer.show_debug(surface, true)
+  return not present_only or needs_drawing
 end
 
 
@@ -67,7 +71,7 @@ end
 
 
 -- activate/prepare the tiles needed to cover the given region
-function TiledView:activate_tiles_for_region(x1, y1, x2, y2, background)
+function TiledView:activate_tiles_for_region(x1, y1, x2, y2, background, present_only)
   local xo, yo = self.tiles_metric.x, self.tiles_metric.y
   local w, h = self.tiles_metric.w, self.tiles_metric.h
 
@@ -81,7 +85,7 @@ function TiledView:activate_tiles_for_region(x1, y1, x2, y2, background)
     for j = min_j, max_j do
       local y = yo + (j - 1) * h
       local tile_id = compose_tile_id(i, j)
-      self:prepare_tile(tile_id, x, y, w, h, background)
+      self:prepare_tile(tile_id, x, y, w, h, background, present_only)
     end
   end
 

@@ -20,6 +20,7 @@ end
 
 function Doc:new(filename, abs_filename, new_file)
   self.new_file = new_file
+  self.ui_dirty = false
   self:reset()
   if filename then
     self:set_filename(filename, abs_filename)
@@ -672,6 +673,11 @@ end
 
 -- For plugins to add custom actions of document change
 function Doc:on_text_change(type)
+  self.ui_dirty = true
+end
+
+function Doc:clear_ui_dirty()
+  self.ui_dirty = false
 end
 
 -- For plugins to get notified when a document is closed

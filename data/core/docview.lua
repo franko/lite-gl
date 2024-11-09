@@ -54,13 +54,18 @@ function DocView:setup_tiles_for_drawing()
 end
 
 
-function DocView:activate_gutter_tiles_for_region(y1, y2, background)
+function DocView:activate_gutter_tiles_for_region(y1, y2, background, present_only)
   local x, y = self:get_gutter_content_offset()
   local w, h = self.tiles_metric.gutter_width, self.tiles_metric.h
   local j1, j2 = math.floor((y1 - y) / h) + 1, math.floor((y2 - 1 - y) / h) + 1
+  local min_draw_j, max_draw_j
   for j = j1, j2 do
-    self:prepare_tile(gutter_tile_id(j), x, y + (j - 1) * h, w, h, background)
+    if self:prepare_tile(gutter_tile_id(j), x, y + (j - 1) * h, w, h, background, present_only) then
+      min_draw_j = min_draw_j or j
+      max_draw_j = j
+    end
   end
+  return min_draw_j, max_draw_j
 end
 
 
@@ -116,6 +121,7 @@ function DocView:new(doc)
   self.ime_selection = { from = 0, size = 0 }
   self.ime_status = false
   self.hovering_gutter = false
+  self.need_redraw = true
   self.tiles_metric = {
     x = 0, y = 0, w = 0, h = 0,
     line_height = 0, gutter_width = 0, gutter_padding = 0,
@@ -465,6 +471,12 @@ function DocView:update_ime_location()
 end
 
 function DocView:update()
+  -- Check if document content changed
+  if self.doc.ui_dirty then
+    self.need_redraw = true
+    self.doc:clear_ui_dirty()
+  end
+
   -- scroll to make caret visible and reset blink timer if it moved
   local line1, col1, line2, col2 = self.doc:get_selection()
   if (line1 ~= self.last_line1 or col1 ~= self.last_col1 or
@@ -639,37 +651,43 @@ function DocView:draw()
 
   local pos = self.position
   local sx, sy = self.size.x, self.size.y
-  self:activate_gutter_tiles_for_region(pos.y + style.padding.y, pos.y + sy, style.background)
-  local x1, y1, x2, y2 = self:activate_tiles_for_region(pos.x + gw, pos.y + style.padding.y, pos.x + sx, pos.y + sy, style.background)
+  local min_draw_j, max_draw_j = self:activate_gutter_tiles_for_region(pos.y + style.padding.y, pos.y + sy, style.background, not self.need_redraw)
+  local x1, y1, x2, y2 = self:activate_tiles_for_region(pos.x + gw, pos.y + style.padding.y, pos.x + sx, pos.y + sy, style.background, not self.need_redraw)
 
   if y1 > pos.y then
     local xb, yb = self:get_content_offset()
     self:set_surface_for("ypad", xb, yb, self.size.x, style.padding.y, style.background)
   end
 
-  local minline, maxline = self:resolve_line(y1), self:resolve_line(y2) - 1
+  local minline, maxline
+  if min_draw_j then
+    minline, maxline = (min_draw_j - 1) * TILE_LINES + 1, math.min(max_draw_j * TILE_LINES, #self.doc.lines)
+  end
 
   local limits = self.tiles_metric.limits
   limits.x1, limits.y1, limits.x2, limits.y2 = x1, y1, x2, y2
 
-  local _, y = self:get_line_screen_position(minline)
-  local x = math.floor(pos.x + 0.5)
-  for i = minline, maxline do
-    y = y + (self:draw_line_gutter(i, x, y, gpad and gw - gpad or gw) or lh)
-  end
+  if minline then
+    local _, y = self:get_line_screen_position(minline)
+    local x = math.floor(pos.x + 0.5)
+    for i = minline, maxline do
+      y = y + (self:draw_line_gutter(i, x, y, gpad and gw - gpad or gw) or lh)
+    end
 
-  x, y = self:get_line_screen_position(minline)
-  -- the clip below ensure we don't write on the gutter region. On the
-  -- right side it is redundant with the Node's clip.
-  core.push_clip_rect(pos.x + gw, pos.y, self.size.x - gw, self.size.y)
-  for i = minline, maxline do
-    y = y + (self:draw_line_body(i, x, y) or lh)
+    x, y = self:get_line_screen_position(minline)
+    -- the clip below ensure we don't write on the gutter region. On the
+    -- right side it is redundant with the Node's clip.
+    core.push_clip_rect(pos.x + gw, pos.y, self.size.x - gw, self.size.y)
+    for i = minline, maxline do
+      y = y + (self:draw_line_body(i, x, y) or lh)
+    end
+    core.pop_clip_rect()
   end
-  core.pop_clip_rect()
 
   self:draw_scrollbar()
   core.root_view:defer_draw(self.draw_overlay, self)
   self:present_surfaces()
+  self.need_redraw = false
 end
 
 

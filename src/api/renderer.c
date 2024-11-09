@@ -391,9 +391,11 @@ static int f_draw_text(lua_State *L) {
 static int f_present_surface(lua_State *L) {
   RenSurface *rs = check_rensurface(L, 1);
   int x = rs->rencache.x_origin, y = rs->rencache.y_origin;
-  rencache_end_frame(&rs->rencache, rs);
-  rencache_update_rects(&rs->rencache, rs);
-  rencache_swap_buffers(&rs->rencache);
+  if (rs->rencache.frame_started) {
+    rencache_end_frame(&rs->rencache, rs);
+    rencache_update_rects(&rs->rencache, rs);
+    rencache_swap_buffers(&rs->rencache);
+  }
   renwin_render_surface(&window_renderer, rs, x, y);
   return 0;
 }

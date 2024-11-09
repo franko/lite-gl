@@ -72,6 +72,7 @@ void rencache_init(RenCache *cache, int x, int y) {
   cache->x_origin = x;
   cache->y_origin = y;
   cache->show_debug = false;
+  cache->frame_started = false;
 }
 
 void rencache_destroy(RenCache* cache) {
@@ -243,6 +244,7 @@ void rencache_begin_frame(RenCache* cache, RenSurface* rs) {
     rencache_invalidate(cache);
   }
   cache->last_clip_rect = cache->surface_rect;
+  cache->frame_started = true;
 }
 
 
@@ -345,6 +347,8 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
       ren_draw_rect(rs, r, color);
     }
   }
+
+  cache->frame_started = false;
 }
 
 
