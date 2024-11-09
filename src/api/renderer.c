@@ -382,7 +382,6 @@ static int f_draw_text(lua_State *L) {
   double x = luaL_checknumber(L, 3);
   int y = luaL_checknumber(L, 4);
   RenColor color = checkcolor(L, 5, 255);
-  if (strcmp(text, "abc123") == 0) { fprintf(stderr, "DEBUG: calling rencache_draw_text (%g, %d)\n", x, y); }
   x = rencache_draw_text(&rs->rencache, fonts, text, len, x, y, color);
   lua_pushnumber(L, x);
   return 1;

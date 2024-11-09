@@ -210,7 +210,6 @@ double rencache_draw_text(RenCache* cache, RenFont **fonts, const char *text, si
   double width = ren_font_group_get_width(fonts, text, len, &x_offset);
   RenRect rect = { x + x_offset, y, (int)(width - x_offset), ren_font_group_get_height(fonts) };
   rect_set_from_origin(cache, &rect);
-  if (strcmp(text, "abc123") == 0) { fprintf(stderr, "DEBUG: rect (%d, %d), x_offset = %d, text_x = %g\n", rect.x, rect.y, x_offset, x - cache->x_origin); }
   if (rects_overlap(cache->last_clip_rect, rect)) {
     int sz = len + 1;
     DrawTextCommand *cmd = push_command(cache, DRAW_TEXT, sizeof(DrawTextCommand) + sz);
@@ -335,7 +334,6 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
           ren_draw_rect(rs, rcmd->rect, rcmd->color);
           break;
         case DRAW_TEXT:
-          if (strcmp(tcmd->text, "abc123") == 0) { fprintf(stderr, "DEBUG: actual text %g %d\n", tcmd->text_x, tcmd->rect.y); }
           ren_font_group_set_tab_size(tcmd->fonts, tcmd->tab_size);
           ren_draw_text(rs, tcmd->fonts, tcmd->text, tcmd->len, tcmd->text_x, tcmd->rect.y, tcmd->color);
           break;
