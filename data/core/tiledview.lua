@@ -45,7 +45,6 @@ function TiledView:prepare_tile(tile_id, x, y, w, h, background, present_only)
   end
   self:set_surface_to_draw(surface)
   self.used_tiles_ids[tile_id] = surface
-  renderer.show_debug(surface, true)
   return not present_only or needs_drawing
 end
 
