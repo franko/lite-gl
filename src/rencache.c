@@ -59,6 +59,9 @@ typedef struct {
   RenColor color;
 } DrawRectCommand;
 
+/* 32bit fnv-1a hash */
+#define HASH_INITIAL 2166136261
+
 void rencache_init(RenCache *cache, int x, int y) {
   cache->cells_prev = cache->cells_buf1;
   cache->cells = cache->cells_buf2;
@@ -73,6 +76,10 @@ void rencache_init(RenCache *cache, int x, int y) {
   cache->y_origin = y;
   cache->show_debug = false;
   cache->frame_started = false;
+
+  for (int i = 0; i < CELLS_X * CELLS_Y; i++) {
+    cache->cells[i] = HASH_INITIAL;
+  }
 }
 
 void rencache_destroy(RenCache* cache) {
@@ -86,9 +93,6 @@ static inline void rect_set_from_origin(RenCache *cache, RenRect *r) {
   r->x = r->x - cache->x_origin;
   r->y = r->y - cache->y_origin;
 }
-
-/* 32bit fnv-1a hash */
-#define HASH_INITIAL 2166136261
 
 static void hash(unsigned *h, const void *data, int size) {
   const unsigned char *p = data;
