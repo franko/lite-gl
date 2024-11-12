@@ -656,7 +656,7 @@ function DocView:draw()
 
   if y1 > pos.y then
     local xb, yb = self:get_content_offset()
-    self:set_surface_for("ypad", xb, yb, self.size.x, style.padding.y, style.background)
+    renderer.render_fill_rect(xb, yb, self.size.x, style.padding.y, style.background)
   end
 
   local minline, maxline
