@@ -409,7 +409,6 @@ double ren_font_group_get_width(RenFont **fonts, const char *text, size_t len, i
 
 double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t len, float x, int y, RenColor color) {
   SDL_Surface *surface = rs->surface;
-  if (!surface) return x + 1.0; // FIXME
   SDL_Rect clip;
   SDL_GetClipRect(surface, &clip);
 
