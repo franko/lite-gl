@@ -7,7 +7,7 @@ local translate = require "core.doc.translate"
 local ime = require "core.ime"
 local TiledView = require "core.tiledview"
 
-local TILE_CHARACTERS, TILE_LINES = 80, 40
+local TILE_CHARACTERS, TILE_LINES = 160, 80
 
 -- DocView inherits from TiledView to display the document's text
 -- content. The gutter is drawn separately using specific methods.
