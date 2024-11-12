@@ -57,10 +57,10 @@ end
 function DocView:activate_gutter_tiles_for_region(y1, y2, background, present_only)
   local x, y = self:get_gutter_content_offset()
   local w, h = self.tiles_metric.gutter_width, self.tiles_metric.h
-  local j1, j2 = math.floor((y1 - y) / h) + 1, math.floor((y2 - 1 - y) / h) + 1
+  local j1, j2 = math.floor((y1 - y) / h), math.floor((y2 - 1 - y) / h)
   local min_draw_j, max_draw_j
   for j = j1, j2 do
-    if self:prepare_tile(gutter_tile_id(j), x, y + (j - 1) * h, w, h, background, present_only) then
+    if self:prepare_tile(gutter_tile_id(j), x, y + j * h, w, h, background, present_only) then
       min_draw_j = min_draw_j or j
       max_draw_j = j
     end
@@ -661,7 +661,7 @@ function DocView:draw()
 
   local minline, maxline
   if min_draw_j then
-    minline, maxline = (min_draw_j - 1) * TILE_LINES + 1, math.min(max_draw_j * TILE_LINES, #self.doc.lines)
+    minline, maxline = min_draw_j * TILE_LINES + 1, math.min((max_draw_j + 1) * TILE_LINES, #self.doc.lines)
   end
 
   local limits = self.tiles_metric.limits

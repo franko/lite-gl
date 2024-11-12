@@ -27,7 +27,7 @@ end
 function TiledView:get_tile_indexes(x, y)
   local xo, yo = self.tiles_metric.x, self.tiles_metric.y
   local w, h = self.tiles_metric.w, self.tiles_metric.h
-  return math.floor((x - xo) / w) + 1, math.floor((y - yo) / h) + 1
+  return math.floor((x - xo) / w), math.floor((y - yo) / h)
 end
 
 
@@ -75,20 +75,20 @@ function TiledView:activate_tiles_for_region(x1, y1, x2, y2, background, present
   local w, h = self.tiles_metric.w, self.tiles_metric.h
 
   -- compute min/max indexes of tiles needed to cover the region (x1, y1, x2, y2)
-  local min_i, max_i = math.floor((x1 - xo) / w) + 1, math.floor((x2 - 1 - xo) / w) + 1
-  local min_j, max_j = math.floor((y1 - yo) / h) + 1, math.floor((y2 - 1 - yo) / h) + 1
+  local min_i, max_i = math.floor((x1 - xo) / w), math.floor((x2 - 1 - xo) / w)
+  local min_j, max_j = math.floor((y1 - yo) / h), math.floor((y2 - 1 - yo) / h)
 
   -- prepare the tiles for drawing
   for i = min_i, max_i do
-    local x = xo + (i - 1) * w
+    local x = xo + i * w
     for j = min_j, max_j do
-      local y = yo + (j - 1) * h
+      local y = yo + j * h
       local tile_id = compose_tile_id(i, j)
       self:prepare_tile(tile_id, x, y, w, h, background, present_only)
     end
   end
 
-  return xo + (min_i -1) * w, yo + (min_j - 1) * h, xo + max_i * w, yo + max_j * h
+  return xo + min_i * w, yo + min_j * h, xo + (max_i + 1) * w, yo + (max_j + 1) * h
 end
 
 
