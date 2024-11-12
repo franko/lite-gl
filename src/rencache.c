@@ -76,10 +76,7 @@ void rencache_init(RenCache *cache, int x, int y) {
   cache->y_origin = y;
   cache->show_debug = false;
   cache->frame_started = false;
-
-  for (int i = 0; i < CELLS_X * CELLS_Y; i++) {
-    cache->cells[i] = HASH_INITIAL;
-  }
+  cache->first_draw = true;
 }
 
 void rencache_destroy(RenCache* cache) {
@@ -231,11 +228,6 @@ double rencache_draw_text(RenCache* cache, RenFont **fonts, const char *text, si
 }
 
 
-void rencache_invalidate(RenCache* cache) {
-  memset(cache->cells_prev, 0xff, sizeof(unsigned) * CELLS_X * CELLS_Y);
-}
-
-
 void rencache_begin_frame(RenCache* cache, RenSurface* rs) {
   /* reset all cells if the screen width/height has changed */
   int w, h;
@@ -244,7 +236,7 @@ void rencache_begin_frame(RenCache* cache, RenSurface* rs) {
   if (cache->surface_rect.width != w || h != cache->surface_rect.height) {
     cache->surface_rect.width = w;
     cache->surface_rect.height = h;
-    rencache_invalidate(cache);
+    cache->first_draw = true;
   }
   cache->last_clip_rect = cache->surface_rect;
   cache->frame_started = true;
@@ -281,6 +273,19 @@ static void push_rect(RenCache* cache, RenRect r, int *count) {
 
 
 void rencache_end_frame(RenCache* cache, RenSurface *rs) {
+  int max_x = cache->surface_rect.width / CELL_SIZE + 1;
+  int max_y = cache->surface_rect.height / CELL_SIZE + 1;
+
+  if (cache->first_draw) {
+    for (int y = 0; y < max_y; y++) {
+      for (int x = 0; x < max_x; x++) {
+        int idx = cell_idx(x, y);
+        cache->cells[idx] = HASH_INITIAL;
+        cache->cells_prev[idx] = HASH_INITIAL;
+      }
+    }
+  }
+
   /* update cells from commands */
   Command *cmd = NULL;
   RenRect cr = cache->surface_rect;
@@ -294,18 +299,20 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
     update_overlapping_cells(cache, r, h);
   }
 
-  /* push rects for all cells changed from last frame, reset cells */
-  cache->rect_count = 0;
-  int max_x = cache->surface_rect.width / CELL_SIZE + 1;
-  int max_y = cache->surface_rect.height / CELL_SIZE + 1;
-  for (int y = 0; y < max_y; y++) {
-    for (int x = 0; x < max_x; x++) {
-      /* compare previous and current cell for change */
-      int idx = cell_idx(x, y);
-      if (cache->cells[idx] != cache->cells_prev[idx]) {
-        push_rect(cache, (RenRect) { x, y, 1, 1 }, &cache->rect_count);
+  if (cache->first_draw) {
+    push_rect(cache, (RenRect) { 0, 0, max_x, max_y }, &cache->rect_count);
+  } else {
+    /* push rects for all cells changed from last frame, reset cells */
+    cache->rect_count = 0;
+    for (int y = 0; y < max_y; y++) {
+      for (int x = 0; x < max_x; x++) {
+        /* compare previous and current cell for change */
+        int idx = cell_idx(x, y);
+        if (cache->cells[idx] != cache->cells_prev[idx]) {
+          push_rect(cache, (RenRect) { x, y, 1, 1 }, &cache->rect_count);
+        }
+        cache->cells_prev[idx] = HASH_INITIAL;
       }
-      cache->cells_prev[idx] = HASH_INITIAL;
     }
   }
 
@@ -351,6 +358,7 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
   }
 
   cache->frame_started = false;
+  cache->first_draw = false;
 }
 
 
