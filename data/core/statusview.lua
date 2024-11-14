@@ -1011,6 +1011,7 @@ function StatusView:draw()
     end
   end
   self:present_surfaces()
+  self:clear_unused_tiles()
 end
 
 return StatusView

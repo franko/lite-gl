@@ -34,7 +34,7 @@ end
 
 function DocView:clear_unused_tiles()
   for id in pairs(self.named_surfaces) do
-    if string.match(id, "^:") and not self.used_tiles_ids[id] then
+    if string.match(id, "^[:>]") and not self.used_tiles_ids[id] then
       self.named_surfaces[id] = nil
     end
   end
@@ -514,7 +514,7 @@ function DocView:draw_line_highlight(y)
 end
 
 
-function DocView:draw_line_text(line, x, y)
+function DocView:draw_line_text_option(use_tiles, line, x, y)
   local default_font = self:get_font()
   local tx, ty = x, y + self:get_line_text_y_offset()
   local last_token = nil
@@ -529,19 +529,29 @@ function DocView:draw_line_text(line, x, y)
     local font = style.syntax_fonts[type] or default_font
     -- do not render newline, fixes issue #1164
     if tidx == last_token then text = text:sub(1, -2) end
-    tx = self:draw_text(font, text, tx, ty, color)
+    if use_tiles then
+      tx = self:draw_text(font, text, tx, ty, color)
+    else
+      tx = renderer.draw_text(font, text, tx, ty, color)
+    end
     if tx > self.tiles_metric.limits.x2 then break end
   end
   return self.tiles_metric.line_height
 end
+
+
+function DocView:draw_line_text(line, x, y)
+  return self:draw_line_text_option(true, line, x, y)
+end
+
 
 function DocView:draw_caret(x, y)
     local w, h = style.caret_width, self.tiles_metric.line_height
     renderer.render_fill_rect(x, y, w, h, style.caret)
 end
 
-function DocView:draw_line_body(line, x, y)
 
+function DocView:draw_line_selection(line, x, y)
   -- draw selection if it overlaps this line
   local lh = self.tiles_metric.line_height
   for lidx, line1, col1, line2, col2 in self.doc:get_selections(true) do
@@ -552,13 +562,14 @@ function DocView:draw_line_body(line, x, y)
       local x1 = x + self:get_col_x_offset(line, col1)
       local x2 = x + self:get_col_x_offset(line, col2)
       if x1 ~= x2 then
-        self:draw_rect(x1, y, x2 - x1, lh, style.selection)
+        local line_id = ">" .. line
+        self:set_surface_for(line_id, x1, y, x2 - x1, lh, style.selection)
+        self:draw_line_text_option(false, line, x, y)
+        self.used_tiles_ids[line_id] = true
       end
     end
   end
-
-  -- draw line's text
-  return self:draw_line_text(line, x, y)
+  return y + lh
 end
 
 
@@ -611,10 +622,15 @@ end
 
 
 function DocView:draw_overlay()
+  local minline, maxline = self:get_visible_line_range()
+  local tx, ty = self:get_line_screen_position(minline)
+  for line = minline, maxline do
+    ty = self:draw_line_selection(line, tx, ty)
+  end
+
   if core.active_view == self then
     local hcl = config.highlight_current_line
     local highlight_line = true
-    local minline, maxline = self:get_visible_line_range()
     -- draw caret if it overlaps this line
     local T = config.blink_period
     for _, line1, col1, line2, col2 in self.doc:get_selections() do
@@ -679,14 +695,17 @@ function DocView:draw()
     -- right side it is redundant with the Node's clip.
     core.push_clip_rect(pos.x + gw, pos.y, self.size.x - gw, self.size.y)
     for i = minline, maxline do
-      y = y + (self:draw_line_body(i, x, y) or lh)
+      y = y + (self:draw_line_text(i, x, y) or lh)
     end
     core.pop_clip_rect()
   end
 
-  self:draw_scrollbar()
-  core.root_view:defer_draw(self.draw_overlay, self)
+  -- core.root_view:defer_draw(self.draw_overlay, self)
   self:present_surfaces()
+  self:draw_overlay()
+  self:draw_scrollbar()
+  self:present_surfaces()
+  self:clear_unused_tiles()
   self.need_redraw = false
 end
 

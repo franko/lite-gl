@@ -18,12 +18,6 @@ function TiledView:new()
 end
 
 
-function TiledView:present_surfaces()
-  self:clear_unused_tiles()
-  TiledView.super.present_surfaces(self)
-end
-
-
 function TiledView:get_tile_indexes(x, y)
   local xo, yo = self.tiles_metric.x, self.tiles_metric.y
   local w, h = self.tiles_metric.w, self.tiles_metric.h
@@ -44,7 +38,7 @@ function TiledView:prepare_tile(tile_id, x, y, w, h, background, present_only)
     renderer.begin_frame(surface, background)
   end
   self:set_surface_to_draw(surface)
-  self.used_tiles_ids[tile_id] = surface
+  self.used_tiles_ids[tile_id] = true
   return not present_only or needs_drawing
 end
 

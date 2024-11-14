@@ -282,6 +282,7 @@ function TreeView:draw_tooltip()
   renderer.draw_rect(x, y, w, h, replace_alpha(style.background2, self.tooltip.alpha))
   common.draw_text(style.font, replace_alpha(style.text, self.tooltip.alpha), text, "center", x, y, w, h)
   self:present_surfaces()
+  self:clear_unused_tiles()
 end
 
 

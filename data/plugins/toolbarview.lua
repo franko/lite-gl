@@ -95,6 +95,7 @@ function ToolbarView:draw()
     self:draw_justified_text(self.toolbar_font, color, item.symbol, nil, x, y, 0, h)
   end
   self:present_surfaces()
+  self:clear_unused_tiles()
 end
 
 
