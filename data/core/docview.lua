@@ -77,8 +77,8 @@ end
 
 
 function DocView:get_gutter_content_offset()
-  local x, y = self:get_content_offset()
-  return x, y + style.padding.y
+  local _, y = self:get_content_offset()
+  return self.position.x, y + style.padding.y
 end
 
 
@@ -670,8 +670,8 @@ function DocView:draw()
 
   local pos = self.position
   local sx, sy = self.size.x, self.size.y
-  local min_draw_j, max_draw_j = self:activate_gutter_tiles_for_region(pos.y + style.padding.y, pos.y + sy, style.background, not self.need_redraw)
   local x1, y1, x2, y2 = self:activate_tiles_for_region(pos.x + gw, pos.y + style.padding.y, pos.x + sx, pos.y + sy, style.background, not self.need_redraw)
+  local min_draw_j, max_draw_j = self:activate_gutter_tiles_for_region(pos.y + style.padding.y, pos.y + sy, style.background, not self.need_redraw)
 
   if y1 > pos.y then
     local xb, yb = self:get_content_offset()
@@ -686,24 +686,22 @@ function DocView:draw()
   local limits = self.tiles_metric.limits
   limits.x1, limits.y1, limits.x2, limits.y2 = x1, y1, x2, y2
 
+
   if minline then
     local _, y = self:get_line_screen_position(minline)
     local x = pos.x
     for i = minline, maxline do
-      y = y + self:draw_line_gutter(i, x, y, gw - gpad)
+      y = y + self:draw_line_gutter(i, x, y, gpad and gw - gpad or gw)
     end
 
     x, y = self:get_line_screen_position(minline)
     -- the clip below ensure we don't write on the gutter region. On the
     -- right side it is redundant with the Node's clip.
-    core.push_clip_rect(pos.x + gw, pos.y, self.size.x - gw, self.size.y)
     for i = minline, maxline do
       y = y + (self:draw_line_text(i, x, y) or lh)
     end
-    core.pop_clip_rect()
   end
 
-  -- core.root_view:defer_draw(self.draw_overlay, self)
   self:present_surfaces()
   self:end_drawing_tiles()
   self:draw_overlay()

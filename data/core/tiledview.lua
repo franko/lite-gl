@@ -92,9 +92,9 @@ function TiledView:activate_tiles_for_region(x1, y1, x2, y2, background, present
 end
 
 
-function TiledView:activate_tiles(background)
+function TiledView:activate_tiles(background, present_only)
   local x, y = self.position.x, self.position.y
-  return self:activate_tiles_for_region(x, y, x + self.size.x, y + self.size.y, background)
+  return self:activate_tiles_for_region(x, y, x + self.size.x, y + self.size.y, background, present_only)
 end
 
 
