@@ -371,19 +371,26 @@ function TreeView:draw()
 
   for item, x,y,w,h in self:each_item() do
     if y + h >= y1 and y < y2 then
-      self:draw_item(item,
-        item == self.selected_item,
-        item == self.hovered_item,
-        x, y, w, h)
+      self:draw_item(item, false, false, x, y, w, h)
+    end
+  end
+  self:present_surfaces()
+  self:end_drawing_tiles()
+
+  for item, x,y,w,h in self:each_item() do
+    if y + h >= y1 and y < y2 then
+      if item == self.selected_item or item == self.hovered_item then
+        self:set_surface_for(item == self.selected_item and "sel" or "hov", x, y, w, h, style.background)
+        self:draw_item(item, item == self.selected_item, item == self.hovered_item, x, y, w, h)
+      end
     end
   end
 
   self:draw_scrollbar()
+  self:present_surfaces()
   if self.hovered_item and self.tooltip.x and self.tooltip.alpha > 0 then
     core.root_view:defer_draw(self.draw_tooltip, self)
   end
-
-  self:present_surfaces()
 end
 
 

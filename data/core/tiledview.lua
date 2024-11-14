@@ -15,6 +15,7 @@ function TiledView:new()
   TiledView.super.new(self)
   self.tiles_metric = { w = 0, h = 0 }
   self.used_tiles_ids = { }
+  self.drawing_tiles = false
 end
 
 
@@ -60,8 +61,13 @@ function TiledView:setup_tiles_for_drawing()
   metric.x, metric.y = self:get_content_offset()
   metric.w, metric.h = self.tiles_width or 400, self.tiles_height or 600
   self.used_tiles_ids = { }
+  self.drawing_tiles = true
 end
 
+
+function TiledView:end_drawing_tiles()
+  self.drawing_tiles = false
+end
 
 -- activate/prepare the tiles needed to cover the given region
 function TiledView:activate_tiles_for_region(x1, y1, x2, y2, background, present_only)
@@ -93,6 +99,9 @@ end
 
 
 function TiledView:draw_text(font, text, x, y, color)
+  if not self.drawing_tiles then
+    return renderer.draw_text(font, text, x, y, color)
+  end
   local i1, j1 = self:get_tile_indexes(x, y)
   local surface = self.named_surfaces[compose_tile_id(i1, j1)]
   local xp, yp = 0, y + font:get_height()
@@ -140,6 +149,10 @@ end
 
 
 function TiledView:draw_rect(x, y, w, h, color)
+  if not self.drawing_tiles then
+    renderer.draw_rect(x, y, w, h, color)
+    return
+  end
   local xp, yp = x + w, y + h
   local i1, j1 = self:get_tile_indexes(x, y)
   -- compute the indexes of the tile that contains the lower-right

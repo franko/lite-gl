@@ -51,6 +51,7 @@ function DocView:setup_tiles_for_drawing()
   metric.x, metric.y = self:get_content_body_offset()
   metric.w, metric.h = cw * TILE_CHARACTERS, lh * TILE_LINES
   self.used_tiles_ids = { }
+  self.drawing_tiles = true
 end
 
 
@@ -505,16 +506,23 @@ function DocView:update()
 end
 
 
-function DocView:draw_line_highlight(y)
+function DocView:draw_line_highlight(line)
+  local _, y = self:get_line_screen_position(line)
   local h = self.tiles_metric.line_height
   local limits = self.tiles_metric.limits
   local line_size = math.max(1, SCALE)
   renderer.render_fill_rect(limits.x1, y, limits.x2 - limits.x1, line_size, style.line_number)
   renderer.render_fill_rect(limits.x1, y + h - line_size, limits.x2 - limits.x1, line_size, style.line_number)
+
+  -- draw gutter highlight
+  local x = self.position.x
+  local gw, gpad = self.tiles_metric.gutter_width, self.tiles_metric.gutter_padding
+  self:set_surface_for("gh", x, y, gw, h, style.background)
+  self:draw_line_gutter_highlight(line, x, y, gw - gpad, style.line_number2)
 end
 
 
-function DocView:draw_line_text_option(use_tiles, line, x, y)
+function DocView:draw_line_text(line, x, y)
   local default_font = self:get_font()
   local tx, ty = x, y + self:get_line_text_y_offset()
   local last_token = nil
@@ -529,19 +537,10 @@ function DocView:draw_line_text_option(use_tiles, line, x, y)
     local font = style.syntax_fonts[type] or default_font
     -- do not render newline, fixes issue #1164
     if tidx == last_token then text = text:sub(1, -2) end
-    if use_tiles then
-      tx = self:draw_text(font, text, tx, ty, color)
-    else
-      tx = renderer.draw_text(font, text, tx, ty, color)
-    end
+    tx = self:draw_text(font, text, tx, ty, color)
     if tx > self.tiles_metric.limits.x2 then break end
   end
   return self.tiles_metric.line_height
-end
-
-
-function DocView:draw_line_text(line, x, y)
-  return self:draw_line_text_option(true, line, x, y)
 end
 
 
@@ -564,7 +563,7 @@ function DocView:draw_line_selection(line, x, y)
       if x1 ~= x2 then
         local line_id = ">" .. line
         self:set_surface_for(line_id, x1, y, x2 - x1, lh, style.selection)
-        self:draw_line_text_option(false, line, x, y)
+        self:draw_line_text(line, x, y)
         self.used_tiles_ids[line_id] = true
       end
     end
@@ -574,13 +573,6 @@ end
 
 
 function DocView:draw_line_gutter(line, x, y, width)
-  local color = style.line_number
-  for _, line1, _, line2 in self.doc:get_selections(true) do
-    if line >= line1 and line <= line2 then
-      color = style.line_number2
-      break
-    end
-  end
   -- The code below should maybe grouped in a function like self:draw_text() but dedicated
   -- to drawing the gutter's text
   local font = self:get_font()
@@ -591,9 +583,21 @@ function DocView:draw_line_gutter(line, x, y, width)
   local surface = self.named_surfaces[gutter_tile_id(tile_j)]
   if surface then
     renderer.set_current_surface(surface)
-    renderer.draw_text(font, line, x + (width - tw), y, color)
+    renderer.draw_text(font, line, x + (width - tw), y, style.line_number)
   end
   return self.tiles_metric.line_height
+end
+
+
+-- The same of draw_line_gutter() but does not use gutter tiles,
+-- just the current surface set. The caller function is supposed
+-- to have set the surface.
+function DocView:draw_line_gutter_highlight(line, x, y, width)
+  local font = self:get_font()
+  x = x + style.padding.x
+  y = y + self:get_line_text_y_offset()
+  local tw = font:get_width(line)
+  renderer.draw_text(font, line, x + (width - tw), y, style.line_number2)
 end
 
 
@@ -637,8 +641,7 @@ function DocView:draw_overlay()
       if line1 >= minline and line1 <= maxline
       and system.window_has_focus() then
         if highlight_line and (hcl ~= "no_selection" or ((line1 == line2) and (col1 == col2))) then
-          local _, y = self:get_line_screen_position(line1)
-          self:draw_line_highlight(y)
+          self:draw_line_highlight(line1)
           highlight_line = false -- only highlight the first line
         end
         if ime.editing then
@@ -685,9 +688,9 @@ function DocView:draw()
 
   if minline then
     local _, y = self:get_line_screen_position(minline)
-    local x = math.floor(pos.x + 0.5)
+    local x = pos.x
     for i = minline, maxline do
-      y = y + (self:draw_line_gutter(i, x, y, gpad and gw - gpad or gw) or lh)
+      y = y + self:draw_line_gutter(i, x, y, gw - gpad)
     end
 
     x, y = self:get_line_screen_position(minline)
@@ -702,6 +705,7 @@ function DocView:draw()
 
   -- core.root_view:defer_draw(self.draw_overlay, self)
   self:present_surfaces()
+  self:end_drawing_tiles()
   self:draw_overlay()
   self:draw_scrollbar()
   self:present_surfaces()
