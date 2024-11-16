@@ -49,7 +49,6 @@ function TreeView:new()
   self.cache = {}
   self.tooltip = { x = 0, y = 0, begin = 0, alpha = 0 }
   self.cursor_pos = { x = 0, y = 0 }
-  self.need_redraw = true
 
   self.item_icon_width = 0
   self.item_text_spacing = 0
@@ -120,7 +119,6 @@ function TreeView:check_cache()
     -- invalidate cache's skip values if directory is declared dirty
     if dir.is_dirty and self.cache[dir.name] then
       self:invalidate_cache(dir.name)
-      self.need_redraw = true
     end
     dir.is_dirty = false
   end
@@ -369,7 +367,7 @@ function TreeView:draw()
   local active_filename = doc and system.absolute_path(doc.filename or "")
 
   self:setup_tiles_for_drawing()
-  local x1, y1, x2, y2 = self:activate_tiles(style.background, not self.need_redraw)
+  local x1, y1, x2, y2 = self:activate_tiles(style.background)
 
   for item, x,y,w,h in self:each_item() do
     if y + h >= y1 and y < y2 then
@@ -378,7 +376,6 @@ function TreeView:draw()
   end
   self:present_surfaces()
   self:end_drawing_tiles()
-  self.need_redraw = false
 
   for item, x,y,w,h in self:each_item() do
     if y + h >= y1 and y < y2 then
@@ -452,7 +449,6 @@ function TreeView:toggle_expand(toggle)
     else
       item.expanded = not item.expanded
     end
-    self.need_redraw = true
     local hovered_dir = core.project_dir_by_name(item.dir_name)
     if hovered_dir and hovered_dir.files_limit then
       core.update_project_subdir(hovered_dir, item.depth == 0 and "" or item.filename, item.expanded)
