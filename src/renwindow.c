@@ -21,7 +21,7 @@ void renwin_get_size(RenWindow *ren, int *w, int *h) {
 
 void renwin_init_renderer(RenWindow *ren) {
   /* We assume here "ren" is zero-initialized */
-  ren->renderer = SDL_CreateRenderer(ren->window, -1, 0);
+  ren->renderer = SDL_CreateRenderer(ren->window, -1, SDL_RENDERER_PRESENTVSYNC);
   ren->scale = get_window_pixels_size(ren, &ren->w_pixels, &ren->h_pixels);
 }
 
