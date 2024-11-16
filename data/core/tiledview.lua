@@ -34,13 +34,14 @@ end
 -- Mark the tile as used.
 function TiledView:prepare_tile(tile_id, x, y, w, h, background, present_only)
   local surface, needs_drawing = self.surface_from_list(self.named_surfaces, tile_id, x, y, w, h)
-  if not present_only or needs_drawing then
+  needs_drawing = needs_drawing or not present_only
+  if needs_drawing then
     renderer.set_current_surface(surface)
     renderer.begin_frame(surface, background)
   end
   self:set_surface_to_draw(surface)
   self.used_tiles_ids[tile_id] = true
-  return not present_only or needs_drawing
+  return needs_drawing
 end
 
 

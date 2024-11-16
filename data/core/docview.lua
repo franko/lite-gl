@@ -692,8 +692,6 @@ function DocView:draw()
     end
 
     x, y = self:get_line_screen_position(minline)
-    -- the clip below ensure we don't write on the gutter region. On the
-    -- right side it is redundant with the Node's clip.
     for i = minline, maxline do
       y = y + (self:draw_line_text(i, x, y) or lh)
     end
