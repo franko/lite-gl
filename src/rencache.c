@@ -238,6 +238,7 @@ void rencache_begin_frame(RenCache* cache, RenSurface* rs) {
     cache->surface_rect.height = h;
     cache->first_draw = true;
   }
+  cache->command_buf_idx = 0;
   cache->last_clip_rect = cache->surface_rect;
   cache->frame_started = true;
 }
@@ -375,6 +376,5 @@ void rencache_swap_buffers(RenCache* cache) {
   unsigned *tmp = cache->cells;
   cache->cells = cache->cells_prev;
   cache->cells_prev = tmp;
-  cache->command_buf_idx = 0;
 }
 
