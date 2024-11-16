@@ -1438,7 +1438,7 @@ function core.run()
         system.wait_event()
         next_step = nil -- perform a step when we're not in focus if get we an event
       end
-    else -- if we redrew, then make sure we only draw at most FPS/sec
+    else -- if we redraw, then make sure we only draw at most FPS/sec
       run_threads_full = 0
       local now = system.get_time()
       local elapsed = now - core.frame_start

@@ -70,6 +70,14 @@ function TiledView:end_drawing_tiles()
 end
 
 -- activate/prepare the tiles needed to cover the given region
+-- Parameters:
+--   x1, y1, x2, y2: pixel bounds of the region to cover
+--   background: (optional) background color or data for new tiles
+--   present_only: (optional) if true, do not set the tile to be redrawn
+--                 if it already exists
+-- Returns:
+--   x1, y1, x2, y2: pixel bounds of the covered region (slightly expanded to tile boundaries)
+--   redraw_min_j, redraw_max_j: row index bounds of tiles needing redraw, or nil if none
 function TiledView:activate_tiles_for_region(x1, y1, x2, y2, background, present_only)
   local xo, yo = self.tiles_metric.x, self.tiles_metric.y
   local w, h = self.tiles_metric.w, self.tiles_metric.h
@@ -78,17 +86,28 @@ function TiledView:activate_tiles_for_region(x1, y1, x2, y2, background, present
   local min_i, max_i = math.floor((x1 - xo) / w), math.floor((x2 - 1 - xo) / w)
   local min_j, max_j = math.floor((y1 - yo) / h), math.floor((y2 - 1 - yo) / h)
 
+  -- Determine the range of rows (j indexes) that need redraw.
+  -- Note: While we could compute a similar range for columns (i indexes), 
+  -- the specific use case (docview) only requires row information for redraw optimization.
+  local redraw_min_j, redraw_max_j
+
   -- prepare the tiles for drawing
-  for i = min_i, max_i do
-    local x = xo + i * w
-    for j = min_j, max_j do
-      local y = yo + j * h
+  for j = min_j, max_j do
+    local y = yo + j * h
+    for i = min_i, max_i do
+      local x = xo + i * w
       local tile_id = compose_tile_id(i, j)
-      self:prepare_tile(tile_id, x, y, w, h, background, present_only)
+      local needs_redraw = self:prepare_tile(tile_id, x, y, w, h, background, present_only)
+      if needs_redraw then
+        redraw_min_j = redraw_min_j or j
+        redraw_max_j = j
+      end
     end
   end
 
-  return xo + min_i * w, yo + min_j * h, xo + (max_i + 1) * w, yo + (max_j + 1) * h
+  -- Return the pixel bounds of the covered region (expanded to tile boundaries)
+  -- and the row index bounds of tiles needing redraw.
+  return xo + min_i * w, yo + min_j * h, xo + (max_i + 1) * w, yo + (max_j + 1) * h, redraw_min_j, redraw_max_j
 end
 
 
