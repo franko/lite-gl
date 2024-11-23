@@ -70,6 +70,11 @@ function TiledView:end_drawing_tiles()
   self.drawing_tiles = false
 end
 
+local function floor_zc(x)
+  local y = math.floor(x)
+  return y >= 0 and y or 0
+end
+
 -- activate/prepare the tiles needed to cover the given region
 -- Parameters:
 --   x1, y1, x2, y2: pixel bounds of the region to cover
@@ -84,8 +89,8 @@ function TiledView:activate_tiles_for_region(x1, y1, x2, y2, background, present
   local w, h = self.tiles_metric.w, self.tiles_metric.h
 
   -- compute min/max indexes of tiles needed to cover the region (x1, y1, x2, y2)
-  local min_i, max_i = math.floor((x1 - xo) / w), math.floor((x2 - 1 - xo) / w)
-  local min_j, max_j = math.floor((y1 - yo) / h), math.floor((y2 - 1 - yo) / h)
+  local min_i, max_i = floor_zc((x1 - xo) / w), floor_zc((x2 - 1 - xo) / w)
+  local min_j, max_j = floor_zc((y1 - yo) / h), floor_zc((y2 - 1 - yo) / h)
 
   -- Determine the range of rows (j indexes) that need redraw.
   -- Note: While we could compute a similar range for columns (i indexes), 
