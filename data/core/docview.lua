@@ -513,7 +513,7 @@ function DocView:draw_line_highlight(line)
   local x = self.position.x
   local gw, gpad = self.tiles_metric.gutter_width, self.tiles_metric.gutter_padding
   self:set_surface_for("gh", x, y, gw, h, style.background)
-  self:draw_line_gutter_highlight(line, x, y, gw - gpad, style.line_number2)
+  self:draw_line_gutter(line, x, y, gw - gpad, style.line_number2)
 end
 
 
@@ -567,32 +567,27 @@ function DocView:draw_line_selection(line, x, y)
 end
 
 
-function DocView:draw_line_gutter(line, x, y, width)
-  -- The code below should maybe grouped in a function like self:draw_text() but dedicated
-  -- to drawing the gutter's text
-  local font = self:get_font()
-  x = x + style.padding.x
-  y = y + self:get_line_text_y_offset()
-  local tw = font:get_width(line)
-  local _, tile_j = self:get_tile_indexes(x, y)
-  local surface = self.named_surfaces[gutter_tile_id(tile_j)]
-  if surface then
-    renderer.set_current_surface(surface)
-    renderer.draw_text(font, line, x + (width - tw), y, style.line_number)
+-- draw text like TiledView:draw_text but use gutter's tiles
+function DocView:draw_text_gutter(font, text, x, y, color)
+  if not self.drawing_tiles then
+    renderer.draw_text(font, text, x, y, color)
+  else
+    local _, tile_j = self:get_tile_indexes(x, y)
+    local surface = self.named_surfaces[gutter_tile_id(tile_j)]
+    if surface then
+      renderer.set_current_surface(surface)
+      renderer.draw_text(font, text, x, y, color)
+    end
   end
-  return self.tiles_metric.line_height
 end
 
 
--- The same of draw_line_gutter() but does not use gutter tiles,
--- just the current surface set. The caller function is supposed
--- to have set the surface.
-function DocView:draw_line_gutter_highlight(line, x, y, width)
+function DocView:draw_line_gutter(line, x, y, width, color)
   local font = self:get_font()
-  x = x + style.padding.x
-  y = y + self:get_line_text_y_offset()
+  x, y = x + style.padding.x, y + self:get_line_text_y_offset()
   local tw = font:get_width(line)
-  renderer.draw_text(font, line, x + (width - tw), y, style.line_number2)
+  self:draw_text_gutter(font, line, x + (width - tw), y, color)
+  return self.tiles_metric.line_height
 end
 
 
@@ -688,7 +683,7 @@ function DocView:draw()
     local _, y = self:get_line_screen_position(minline)
     local x = pos.x
     for i = minline, maxline do
-      y = y + self:draw_line_gutter(i, x, y, gpad and gw - gpad or gw)
+      y = y + self:draw_line_gutter(i, x, y, gpad and gw - gpad or gw, style.line_number)
     end
 
     x, y = self:get_line_screen_position(minline)
