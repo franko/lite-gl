@@ -533,10 +533,10 @@ function DocView:draw()
 end
 
 local old_draw_line_gutter = DocView.draw_line_gutter
-function DocView:draw_line_gutter(line, x, y, width)
+function DocView:draw_line_gutter(line, x, y, width, color)
   local lh = self:get_line_height()
   local _, _, count = get_line_idx_col_count(self, line)
-  return (old_draw_line_gutter(self, line, x, y, width) or lh) * count
+  return (old_draw_line_gutter(self, line, x, y, width, color) or lh) * count
 end
 
 local old_translate_end_of_line = translate.end_of_line
