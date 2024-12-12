@@ -108,7 +108,14 @@ local function load_view(t)
       -- document not associated to a file
       dv = DocView(core.open_doc())
     else
-      -- we have a filename, try to read the file
+      -- we have a filename, check if it exists and if yes try to load it.
+      -- If the file does not exist we skip it. There is no interest to open
+      -- a document for a file that is no longer there. We do not remember
+      -- its previous content so we are not providing anything useful to the
+      -- user but it will be annoying to have a tab for a "zombie" file and in
+      -- additio the application will prompt for a confirmation if the user try
+      -- to close the tab.
+      if not system.get_file_info(t.filename) then return end
       local ok, doc = pcall(core.open_doc, t.filename)
       if ok then
         dv = DocView(doc)
