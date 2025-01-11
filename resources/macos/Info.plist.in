@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleExecutable</key>
-	<string>lite-xl</string>
+	<string>lite-gl</string>
 	<key>CFBundleGetInfoString</key>
-	<string>lite-xl</string>
+	<string>lite-gl</string>
 	<key>CFBundleIconFile</key>
 	<string>icon.icns</string>
   <key>CFBundleIdentifier</key>
-  <string>com.lite-xl</string>
+  <string>com.lite-gl</string>
 	<key>CFBundleName</key>
-	<string>Lite XL</string>
+	<string>Lite GL</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>NSHighResolutionCapable</key>
@@ -27,7 +27,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>@PROJECT_VERSION@</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>© 2019-2022 Lite XL Team</string>
+	<string>© 2025 Lite GL Team</string>
 </dict>
 </plist>
 

@@ -2,7 +2,7 @@
 set -e
 
 if [ ! -e "src/api/api.h" ]; then
-  echo "Please run this script from the root directory of Lite XL."; exit 1
+  echo "Please run this script from the root directory of Lite GL."; exit 1
 fi
 
 source scripts/common.sh
@@ -90,10 +90,10 @@ main() {
     version="${version}-addons"
   fi
 
-  output="LiteXL${version}-${arch_file}-setup"
+  output="LiteGL${version}-${arch_file}-setup"
 
   "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -dARCH=$arch //F"${output}" "${build_dir}/scripts/innosetup.iss"
-  pushd "${build_dir}/scripts"; mv LiteXL*.exe "./../../"; popd
+  pushd "${build_dir}/scripts"; mv LiteGL*.exe "./../../"; popd
 }
 
 main "$@"

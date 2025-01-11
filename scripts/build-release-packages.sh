@@ -58,25 +58,34 @@ rm -fr .lhelper
 lhelper create build
 source "$(lhelper env-source build)"
 
+pgo_flag="--pgo" # can be "--pgo" or empty
+create_addons_package=yes # can be "yes" or "no"
+
 if [[ "$OSTYPE" == "msys" ]]; then
-  bash scripts/build.sh --portable --release --system-lua --pgo
+  bash scripts/build.sh --portable --release $pgo_flag
   bash scripts/package.sh --version "$VERSION" --binary --release
-  bash scripts/package.sh --version "$VERSION" --addons --binary --release
+  if [[ $create_addons_package == yes ]]; then
+    bash scripts/package.sh --version "$VERSION" --addons --binary --release
+  fi
 elif [[ "$OSTYPE" == "linux"* || "$OSTYPE" == "freebsd"* ]]; then
-  bash scripts/build.sh --portable --release --system-lua --pgo
+  bash scripts/build.sh --portable --release $pgo_flag
   bash scripts/package.sh --version "$VERSION" --binary --release
-  bash scripts/package.sh --version "$VERSION" --addons --binary --release
+  if [[ $create_addons_package == yes ]]; then
+    bash scripts/package.sh --version "$VERSION" --addons --binary --release
+  fi
 
   # We may add the --pgo option, only in the first line below.
   # No needed for the second line since it doesn't do a rebuild.
-  bash scripts/appimage.sh --version "$VERSION" --system-lua --pgo --release
-  bash scripts/appimage.sh --version "$VERSION" --nobuild --addons
+  bash scripts/appimage.sh --version "$VERSION" $pgo_flag --release
+  if [[ $create_addons_package == yes ]]; then
+    bash scripts/appimage.sh --version "$VERSION" --nobuild --addons
+  fi
 elif [[ "$OSTYPE" == "darwin"* ]]; then
   # We may use the option --pgo below but it doesn't work to run
   # the binary from the build directory when the bundle option
   # is activated.
   # We can use --notarize below to with the package script.
-  bash scripts/build.sh --bundle --release --system-lua --arch $ARCH
+  bash scripts/build.sh --bundle --release --arch $ARCH
   bash scripts/package.sh --version "$VERSION" --dmg --release --arch $ARCH $notarize
   bash scripts/package.sh --version "$VERSION" --addons --dmg --release --arch $ARCH $notarize
 fi

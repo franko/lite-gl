@@ -2,7 +2,7 @@
 set -e
 
 if [ ! -e "src/api/api.h" ]; then
-  echo "Please run this script from the root directory of Lite XL."; exit 1
+  echo "Please run this script from the root directory of Lite GL."; exit 1
 fi
 
 source scripts/common.sh
@@ -26,7 +26,6 @@ show_help() {
   echo "                              macOS: disabled when used with --bundle,"
   echo "                              Windows: Implicit being the only option."
   echo "-r --release                  Compile in release mode."
-  echo "   --system-lua               Use system provided Lua."
   echo "   --arch ARCH                CPU architecture to name build directory."
   echo
 }
@@ -41,7 +40,6 @@ main() {
   local portable
   local pgo
   local patch_lua
-  local system_lua
 
   local lua_subproject_path
 
@@ -95,10 +93,6 @@ main() {
         shift
         shift
         ;;
-      --system-lua)
-        system_lua="-Duse_system_lua=true"
-        shift
-        ;;
       -r|--release)
         build_type="release"
         shift
@@ -140,7 +134,6 @@ main() {
   CFLAGS=$CFLAGS LDFLAGS=$LDFLAGS meson setup \
     --buildtype=$build_type \
     --prefix "$prefix" \
-    $system_lua \
     $force_fallback \
     $bundle \
     $portable \
@@ -151,7 +144,7 @@ main() {
 
   if [[ $pgo != "" ]]; then
     cp -r data "${build_dir}/src"
-    "${build_dir}/src/lite-xl"
+    "${build_dir}/src/lite-gl"
     meson configure -Db_pgo=use "${build_dir}"
     meson compile -C "${build_dir}"
     rm -fr "${build_dir}/data"

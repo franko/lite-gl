@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
     SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
   init_window_icon();
   if (!window) {
-    fprintf(stderr, "Error creating lite-xl window: %s", SDL_GetError());
+    fprintf(stderr, "Error creating lite-gl window: %s", SDL_GetError());
     exit(1);
   }
   ren_init(window);
@@ -235,8 +235,8 @@ init_lua:
     "  HOME = os.getenv('" LITE_OS_HOME "')\n"
     "  local exedir = match(EXEFILE, '^(.*)" LITE_PATHSEP_PATTERN LITE_NONPATHSEP_PATTERN "$')\n"
     "  local prefix = match(exedir, '^(.*)" LITE_PATHSEP_PATTERN "bin$')\n"
-    "  dofile((MACOS_RESOURCES or (prefix and prefix .. '/share/lite-xl' or exedir .. '/data')) .. '/core/start.lua')\n"
-    "  core = require(os.getenv('LITE_XL_RUNTIME') or 'core')\n"
+    "  dofile((MACOS_RESOURCES or (prefix and prefix .. '/share/lite-gl' or exedir .. '/data')) .. '/core/start.lua')\n"
+    "  core = require(os.getenv('LITE_GL_RUNTIME') or 'core')\n"
     "  core.init()\n"
     "  core.run()\n"
     "end, function(err)\n"
@@ -253,7 +253,7 @@ init_lua:
     "    fp:write(debug.traceback(nil, 4)..'\\n')\n"
     "    fp:close()\n"
     "  end\n"
-    "  system.show_fatal_error('Lite XL internal error',\n"
+    "  system.show_fatal_error('Lite GL internal error',\n"
     "    'An internal error occurred in a critical part of the application.\\n\\n'..\n"
     "    'Please verify the file \\\"error.txt\\\" in the directory '..error_dir)\n"
     "  os.exit(1)\n"
@@ -273,7 +273,7 @@ init_lua:
     goto init_lua;
   }
 
-  // This allows the window to be destroyed before lite-xl is done with
+  // This allows the window to be destroyed before lite-gl is done with
   // reaping child processes
   ren_free_window_resources(&window_renderer);
   // if (rencache) {

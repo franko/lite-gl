@@ -59,7 +59,7 @@ if [ "$option_portable" == on ]; then
   datadir="$rundir/data"
 else
   bindir="$rundir/bin"
-  datadir="$rundir/share/lite-xl"
+  datadir="$rundir/share/lite-gl"
 fi
 
 userdir="$(realpath "$rundir")"
@@ -75,9 +75,9 @@ copy_lite_build () {
   rm -fr "$rundir"
   mkdir -p "$bindir" "$datadir"
   if [ ! -z ${run_windows+x} ]; then
-    cp "$builddir/src/lite-xl.exe" "$bindir"
+    cp "$builddir/src/lite-gl.exe" "$bindir"
   else
-    cp "$builddir/src/lite-xl" "$bindir"
+    cp "$builddir/src/lite-gl" "$bindir"
   fi
   mkdir -p "$datadir/core"
   for module_name in core plugins colors fonts; do
@@ -92,16 +92,16 @@ copy_lite_build () {
 
 run_lite () {
   if [ ! -z ${option_global+x} ]; then
-    echo "running \"lite-xl ${pargs[@]:1}\""
-    cmd=("$bindir/lite-xl" "${pargs[@]:1}")
+    echo "running \"lite-gl ${pargs[@]:1}\""
+    cmd=("$bindir/lite-gl" "${pargs[@]:1}")
   else
-    echo "running \"lite-xl ${pargs[@]:1}\" with local HOME"
+    echo "running \"lite-gl ${pargs[@]:1}\" with local HOME"
     if [ ! -z ${run_windows+x} ]; then
       export USERPROFILE="$userdir"
-      cmd=("$bindir/lite-xl" "${pargs[@]:1}")
+      cmd=("$bindir/lite-gl" "${pargs[@]:1}")
     else
       export HOME="$userdir"
-      cmd=("$bindir/lite-xl" "${pargs[@]:1}")
+      cmd=("$bindir/lite-gl" "${pargs[@]:1}")
     fi
   fi
 
@@ -118,15 +118,15 @@ run_lite_record () {
 
   # Check if application started successfully
   if ! ps -p $APP_PID > /dev/null; then
-    echo "Failed to start lite-xl"
+    echo "Failed to start lite-gl"
     exit 1
   fi
 
-  echo "Started lite-xl with PID: $APP_PID"
+  echo "Started lite-gl with PID: $APP_PID"
   echo "Recording CPU usage for 60 seconds..."
 
   # Run psrecord
-  psrecord $APP_PID --interval 0.2 --duration 60 --plot lite_xl_cpu.png
+  psrecord $APP_PID --interval 0.2 --duration 60 --plot lite_gl_cpu.png
 
   # Wait for the application to finish
   wait $APP_PID

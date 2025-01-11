@@ -1,8 +1,8 @@
-#define MyAppName      "Lite XL"
+#define MyAppName      "Lite GL"
 #define MyAppVersion   "@PROJECT_VERSION@"
-#define MyAppPublisher "Lite XL Team"
-#define MyAppURL       "https://lite-xl.com"
-#define MyAppExeName   "lite-xl.exe"
+#define MyAppPublisher "Lite GL Team"
+#define MyAppURL       "https://lite-gl.com"
+#define MyAppExeName   "lite-gl.exe"
 #define BuildDir       "@PROJECT_BUILD_DIR@"
 #define SourceDir      "@PROJECT_SOURCE_DIR@"
 
@@ -55,7 +55,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 UsedUserAreasWarning=no
 
 OutputDir=.
-OutputBaseFilename=LiteXL-{#MyAppVersion}-{#ArchInternal}-setup
+OutputBaseFilename=LiteGL-{#MyAppVersion}-{#ArchInternal}-setup
 ;DisableDirPage=yes
 ;DisableProgramGroupPage=yes
 

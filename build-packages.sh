@@ -30,7 +30,6 @@ show_help() {
   echo "-O --pgo                      Use profile guided optimizations (pgo)."
   echo "                              Requires running the application iteractively."
   echo "   --cross-file CROSS_FILE    The cross file used for compiling."
-  echo "   --system-lua               Use system provided Lua."
   echo "   --with-addons              Include Lite XL addons."
   echo
   echo "Package options:"
@@ -64,7 +63,6 @@ main() {
   local innosetup
   local portable
   local pgo
-  local system_lua
   local addons
   local release
   local cross_platform
@@ -141,10 +139,6 @@ main() {
         shift
         shift
         ;;
-      --system-lua)
-        system_lua="--system-lua"
-        shift
-        ;;
       --with-addons)
         addons="--addons"
         ;;
@@ -190,7 +184,6 @@ main() {
     ${cross_file_option[@]} \
     $debug \
     $force_fallback \
-    $system_lua \
     $bundle \
     $portable \
     $release \

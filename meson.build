@@ -1,12 +1,4 @@
-project('lite-xl',
-    ['c'],
-    version : '2.1.4',
-    license : 'MIT',
-    meson_version : '>= 0.56',
-    default_options : [
-        'c_std=gnu11'
-    ]
-)
+project('lite-gl', 'c', version : '2.1.4', license : 'MIT', default_options : [ 'c_std=gnu11' ])
 
 #===============================================================================
 # Project version including git commit if possible
@@ -102,8 +94,8 @@ if get_option('portable') or host_machine.system() == 'windows'
     lite_docdir = '/doc'
     lite_datadir = '/data'
     configure_file(
-        input: 'resources/windows/lite-xl.exe.manifest.in',
-        output: 'lite-xl.exe.manifest',
+        input: 'resources/windows/lite-gl.exe.manifest.in',
+        output: 'lite-gl.exe.manifest',
         configuration: conf_data
     )
 elif get_option('bundle') and host_machine.system() == 'darwin'
@@ -121,16 +113,16 @@ elif get_option('bundle') and host_machine.system() == 'darwin'
     )
 else
     lite_bindir = 'bin'
-    lite_docdir = 'share/doc/lite-xl'
-    lite_datadir = 'share/lite-xl'
+    lite_docdir = 'share/doc/lite-gl'
+    lite_datadir = 'share/lite-gl'
     if host_machine.system() == 'linux'
-        install_data('resources/icons/lite-xl.svg',
+        install_data('resources/icons/lite-gl.svg',
             install_dir : 'share/icons/hicolor/scalable/apps'
         )
-        install_data('resources/linux/org.lite_xl.lite_xl.desktop',
+        install_data('resources/linux/org.lite_gl.lite_gl.desktop',
             install_dir : 'share/applications'
         )
-        install_data('resources/linux/org.lite_xl.lite_xl.appdata.xml',
+        install_data('resources/linux/org.lite_gl.lite_gl.appdata.xml',
             install_dir : 'share/metainfo'
         )
     endif
