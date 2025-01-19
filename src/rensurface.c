@@ -1,11 +1,11 @@
 #include "rensurface.h"
 
-void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, int h, int scale) {
+void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, int h, int scale, bool single_surface_mode) {
   /* Note that w and h here should always be in pixels and obtained from
      a call to SDL_GL_GetDrawableSize(). */
   rs->surface = NULL;
   rs->texture = NULL;
-  rencache_init(&rs->rencache, x, y, RENCACHE_SEGMENTED_SURFACE);
+  rencache_init(&rs->rencache, x, y, single_surface_mode);
 
   if (w > 0 && h > 0) {
     const int w_scaled = w * scale, h_scaled = h * scale;

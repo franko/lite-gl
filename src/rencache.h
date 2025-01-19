@@ -8,9 +8,6 @@
 #define CELLS_X 80
 #define CELLS_Y 50
 
-#define RENCACHE_SEGMENTED_SURFACE 0
-#define RENCACHE_WHOLE_SURFACE 1
-
 typedef struct RenCache {
     unsigned *cells_buf1;
     unsigned *cells_buf2;
