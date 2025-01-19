@@ -62,7 +62,20 @@ typedef struct {
 /* 32bit fnv-1a hash */
 #define HASH_INITIAL 2166136261
 
-void rencache_init(RenCache *cache, int x, int y) {
+void rencache_init(RenCache *cache, int x, int y, bool single_surface_mode) {
+  cache->single_surface_mode = single_surface_mode;
+  if (!single_surface_mode) {
+    const size_t buf_cell_sz = sizeof(unsigned) * CELLS_X * CELLS_Y;
+    const size_t buf_rect_sz = sizeof(RenRect) * CELLS_X * CELLS_Y / 2;
+    void *buffer = malloc(buf_cell_sz * 2 + buf_rect_sz);
+    cache->cells_buf1 = (unsigned *) buffer;
+    cache->cells_buf2 = (unsigned *) ((char *)buffer + buf_cell_sz);
+    cache->rect_buf = (RenRect *)((char *)buffer + 2 * buf_cell_sz);
+  } else {
+    cache->cells_buf1 = cache->whole_surface_cells;
+    cache->cells_buf2 = cache->whole_surface_cells + 1;
+    cache->rect_buf = cache->whole_surface_rect;
+  }
   cache->cells_prev = cache->cells_buf1;
   cache->cells = cache->cells_buf2;
   cache->command_buf_size = 0;
@@ -274,8 +287,8 @@ static void push_rect(RenCache* cache, RenRect r, int *count) {
 
 
 void rencache_end_frame(RenCache* cache, RenSurface *rs) {
-  int max_x = cache->surface_rect.width / CELL_SIZE + 1;
-  int max_y = cache->surface_rect.height / CELL_SIZE + 1;
+  int max_x = cache->single_surface_mode ? 1 : cache->surface_rect.width / CELL_SIZE + 1;
+  int max_y = cache->single_surface_mode ? 1 : cache->surface_rect.height / CELL_SIZE + 1;
 
   if (cache->first_draw) {
     for (int y = 0; y < max_y; y++) {
@@ -297,7 +310,11 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
     if (r.width == 0 || r.height == 0) { continue; }
     unsigned h = HASH_INITIAL;
     hash(&h, cmd, cmd->size);
-    update_overlapping_cells(cache, r, h);
+    if (cache->single_surface_mode) {
+      hash(&cache->cells[0], &h, sizeof(unsigned));
+    } else {
+      update_overlapping_cells(cache, r, h);
+    }
   }
 
   if (cache->first_draw) {
@@ -318,12 +335,14 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
   }
 
   /* expand rects from cells to pixels */
+  const int cell_size_x = (cache->single_surface_mode ? cache->surface_rect.width  : CELL_SIZE);
+  const int cell_size_y = (cache->single_surface_mode ? cache->surface_rect.height : CELL_SIZE);
   for (int i = 0; i < cache->rect_count; i++) {
     RenRect *r = &cache->rect_buf[i];
-    r->x *= CELL_SIZE;
-    r->y *= CELL_SIZE;
-    r->width *= CELL_SIZE;
-    r->height *= CELL_SIZE;
+    r->x *= cell_size_x;
+    r->y *= cell_size_y;
+    r->width *= cell_size_x;
+    r->height *= cell_size_y;
     *r = intersect_rects(*r, cache->surface_rect);
   }
 

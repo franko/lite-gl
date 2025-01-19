@@ -5,7 +5,7 @@ void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, i
      a call to SDL_GL_GetDrawableSize(). */
   rs->surface = NULL;
   rs->texture = NULL;
-  rencache_init(&rs->rencache, x, y);
+  rencache_init(&rs->rencache, x, y, RENCACHE_SEGMENTED_SURFACE);
 
   if (w > 0 && h > 0) {
     const int w_scaled = w * scale, h_scaled = h * scale;

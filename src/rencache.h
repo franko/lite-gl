@@ -8,12 +8,15 @@
 #define CELLS_X 80
 #define CELLS_Y 50
 
+#define RENCACHE_SEGMENTED_SURFACE 0
+#define RENCACHE_WHOLE_SURFACE 1
+
 typedef struct RenCache {
-    unsigned cells_buf1[CELLS_X * CELLS_Y];
-    unsigned cells_buf2[CELLS_X * CELLS_Y];
+    unsigned *cells_buf1;
+    unsigned *cells_buf2;
     unsigned *cells_prev;
     unsigned *cells;
-    RenRect rect_buf[CELLS_X * CELLS_Y / 2];
+    RenRect *rect_buf;
     size_t command_buf_size;
     uint8_t *command_buf;
     bool resize_issue;
@@ -22,12 +25,15 @@ typedef struct RenCache {
     RenRect last_clip_rect;
     int rect_count;
     int x_origin, y_origin;
+    bool single_surface_mode;
     bool frame_started;
     bool first_draw;
     bool show_debug;
+    unsigned whole_surface_cells[2];
+    RenRect whole_surface_rect[1];
 } RenCache;
 
-void rencache_init(RenCache *cache, int x_origin, int y_origin);
+void rencache_init(RenCache *cache, int x_origin, int y_origin, bool single_surface_mode);
 void rencache_destroy(RenCache* cache);
 void  rencache_show_debug(RenCache* cache, bool enable);
 void  rencache_set_clip_rect(RenCache* cache, RenRect rect);
