@@ -8,6 +8,8 @@
 #include FT_LCD_FILTER_H
 #include FT_OUTLINE_H
 #include FT_SYSTEM_H
+#include <hb.h>
+#include <hb-ft.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -64,8 +66,14 @@ typedef struct RenFont {
   ERenFontHinting hinting;
   unsigned char style;
   unsigned short underline_thickness;
+  hb_font_t *hb_font;
   char path[];
 } RenFont;
+
+// List of programming ligatures to support
+static const char* ligature_replacements[] = {
+  "<=", ">=", "==", "!=", "->", "&&", "||", ">>", "<<", "//", "/*", "*/", "++", "--", NULL
+};
 
 static const char* utf8_to_codepoint(const char *p, unsigned *dst) {
   const unsigned char *up = (unsigned char*)p;
@@ -202,6 +210,20 @@ static GlyphSet* font_get_glyphset(RenFont* font, unsigned int codepoint, int su
   return font->sets[font->antialiasing == FONT_ANTIALIASING_SUBPIXEL ? subpixel_idx : 0][idx];
 }
 
+static bool is_ligature_at_position(const char *text, size_t len, size_t pos, const char **ligature, size_t *ligature_len) {
+  if (pos >= len) return false;
+  
+  for (int i = 0; ligature_replacements[i] != NULL; i++) {
+    size_t lig_len = strlen(ligature_replacements[i]);
+    if (pos + lig_len <= len && memcmp(text + pos, ligature_replacements[i], lig_len) == 0) {
+      *ligature = ligature_replacements[i];
+      *ligature_len = lig_len;
+      return true;
+    }
+  }
+  return false;
+}
+
 static RenFont* font_group_get_glyph(GlyphSet** set, GlyphMetric** metric, RenFont** fonts, unsigned int codepoint, int bitmap_index) {
   if (!metric) {
     return NULL;
@@ -284,6 +306,7 @@ RenFont* ren_font_load(RenWindow *window_renderer, const char* path, float size,
   font->antialiasing = antialiasing;
   font->hinting = hinting;
   font->style = style;
+  font->hb_font = hb_ft_font_create_referenced(face);
 
   if(FT_IS_SCALABLE(face))
     font->underline_thickness = (unsigned short)((face->underline_thickness / (float)face->units_per_EM) * font->size);
@@ -333,6 +356,9 @@ int ren_font_get_scale(RenFont *font) {
 
 void ren_font_free(RenFont* font) {
   font_clear_glyph_cache(font);
+  if (font->hb_font) {
+    hb_font_destroy(font->hb_font);
+  }
   FT_Done_Face(font->face);
   free(font);
 }
@@ -383,27 +409,117 @@ double ren_font_group_get_width(RenFont **fonts, const char *text, size_t len, i
   GlyphMetric* metric = NULL; GlyphSet* set = NULL;
   bool set_x_offset = x_offset == NULL;
   int surface_scale = -1;
-  while (text < end) {
-    unsigned int codepoint;
-    text = utf8_to_codepoint(text, &codepoint);
-    RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, 0);
-    /* we assume font is not NULL here because the previous function always return
-       a non-null font except is a null metric pointer is provided. */
-    assert(font != NULL);
-    if (surface_scale < 0) {
-      surface_scale = ren_font_get_scale(font);
+  
+  // Create HarfBuzz buffer for text shaping
+  hb_buffer_t *hb_buffer = hb_buffer_create();
+  if (!hb_buffer) {
+    // Fallback to non-ligature rendering if HarfBuzz fails
+    const char* text_ptr = text;
+    while (text_ptr < end) {
+      unsigned int codepoint;
+      text_ptr = utf8_to_codepoint(text_ptr, &codepoint);
+      RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, 0);
+      assert(font != NULL);
+      if (surface_scale < 0) {
+        surface_scale = ren_font_get_scale(font);
+      }
+      if (!metric)
+        break;
+      width += metric->xadvance ? metric->xadvance : fonts[0]->space_advance;
+      if (!set_x_offset) {
+        set_x_offset = true;
+        *x_offset = metric->bitmap_left;
+      }
     }
-    if (!metric)
-      break;
-    width += metric->xadvance ? metric->xadvance : fonts[0]->space_advance;
-    if (!set_x_offset) {
-      set_x_offset = true;
-      *x_offset = metric->bitmap_left; // TODO: should this be scaled by the surface scale?
+  } else {
+    const char* text_ptr = text;
+    size_t pos = 0;
+    
+    while (pos < len) {
+      const char* ligature = NULL;
+      size_t ligature_len = 0;
+      
+      if (is_ligature_at_position(text, len, pos, &ligature, &ligature_len)) {
+        // Process ligature with HarfBuzz
+        hb_buffer_reset(hb_buffer);
+        hb_buffer_add_utf8(hb_buffer, ligature, -1, 0, -1);
+        hb_buffer_set_direction(hb_buffer, HB_DIRECTION_LTR);
+        hb_buffer_set_script(hb_buffer, HB_SCRIPT_LATIN);
+        hb_buffer_set_language(hb_buffer, hb_language_from_string("en", -1));
+        
+        hb_shape(fonts[0]->hb_font, hb_buffer, NULL, 0);
+        
+        unsigned int glyph_count;
+        hb_glyph_info_t *glyph_info = hb_buffer_get_glyph_infos(hb_buffer, &glyph_count);
+        hb_glyph_position_t *glyph_pos = hb_buffer_get_glyph_positions(hb_buffer, &glyph_count);
+        
+        if (glyph_count > 0) {
+          double ligature_width = 0;
+          for (unsigned int i = 0; i < glyph_count; i++) {
+            ligature_width += glyph_pos[i].x_advance / 64.0;
+          }
+          
+          if (surface_scale < 0) {
+            surface_scale = ren_font_get_scale(fonts[0]);
+          }
+          
+          width += ligature_width;
+          
+          if (!set_x_offset) {
+            set_x_offset = true;
+            // Load the first glyph to get its bitmap_left
+            FT_Load_Glyph(fonts[0]->face, glyph_info[0].codepoint, font_set_load_options(fonts[0]));
+            *x_offset = fonts[0]->face->glyph->bitmap_left;
+          }
+        } else {
+          // Fallback to rendering individual characters
+          for (size_t i = 0; i < ligature_len; i++) {
+            unsigned int codepoint;
+            text_ptr = utf8_to_codepoint(text + pos + i, &codepoint);
+            RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, 0);
+            assert(font != NULL);
+            if (surface_scale < 0) {
+              surface_scale = ren_font_get_scale(font);
+            }
+            if (!metric)
+              break;
+            width += metric->xadvance ? metric->xadvance : fonts[0]->space_advance;
+            if (!set_x_offset && i == 0) {
+              set_x_offset = true;
+              *x_offset = metric->bitmap_left;
+            }
+          }
+        }
+        
+        pos += ligature_len;
+        text_ptr = text + pos;
+      } else {
+        // Process regular character
+        unsigned int codepoint;
+        text_ptr = utf8_to_codepoint(text_ptr, &codepoint);
+        RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, 0);
+        assert(font != NULL);
+        if (surface_scale < 0) {
+          surface_scale = ren_font_get_scale(font);
+        }
+        if (!metric)
+          break;
+        width += metric->xadvance ? metric->xadvance : fonts[0]->space_advance;
+        if (!set_x_offset) {
+          set_x_offset = true;
+          *x_offset = metric->bitmap_left;
+        }
+        pos = text_ptr - text;
+      }
     }
+    
+    hb_buffer_destroy(hb_buffer);
   }
+  
   if (!set_x_offset) {
     *x_offset = 0;
   }
+  
   return width / surface_scale;
 }
 
@@ -425,77 +541,332 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
   bool underline = fonts[0]->style & FONT_STYLE_UNDERLINE;
   bool strikethrough = fonts[0]->style & FONT_STYLE_STRIKETHROUGH;
 
-  while (text < end) {
-    unsigned int codepoint, r, g, b;
-    text = utf8_to_codepoint(text, &codepoint);
-    GlyphSet* set = NULL; GlyphMetric* metric = NULL;
-    RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, (int)(fmod(pen_x, 1.0) * SUBPIXEL_BITMAPS_CACHED));
-    if (!metric)
-      break;
-    int start_x = floor(pen_x) + metric->bitmap_left;
-    int end_x = (metric->x1 - metric->x0) + start_x;
-    int glyph_end = metric->x1, glyph_start = metric->x0;
-    if (!metric->loaded && codepoint > 0xFF)
-      ren_draw_rect(rs, (RenRect){ start_x + 1, y, font->space_advance - 1, ren_font_group_get_height(fonts) }, color);
-    if (set->surface && color.a > 0 && end_x >= clip.x && start_x < clip_end_x) {
-      uint8_t* source_pixels = set->surface->pixels;
-      for (int line = metric->y0; line < metric->y1; ++line) {
-        int target_y = line + y - metric->bitmap_top + fonts[0]->baseline * surface_scale;
-        if (target_y < clip.y)
-          continue;
-        if (target_y >= clip_end_y)
-          break;
-        if (start_x + (glyph_end - glyph_start) >= clip_end_x)
-          glyph_end = glyph_start + (clip_end_x - start_x);
-        if (start_x < clip.x) {
-          int offset = clip.x - start_x;
-          start_x += offset;
-          glyph_start += offset;
-        }
-        uint32_t* destination_pixel = (uint32_t*)&(destination_pixels[surface->pitch * target_y + start_x * bytes_per_pixel]);
-        uint8_t* source_pixel = &source_pixels[line * set->surface->pitch + glyph_start * (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL ? 3 : 1)];
-        for (int x = glyph_start; x < glyph_end; ++x) {
-          uint32_t destination_color = *destination_pixel;
-          // the standard way of doing this would be SDL_GetRGBA, but that introduces a performance regression. needs to be investigated
-          SDL_Color dst = { (destination_color & surface->format->Rmask) >> surface->format->Rshift, (destination_color & surface->format->Gmask) >> surface->format->Gshift, (destination_color & surface->format->Bmask) >> surface->format->Bshift, (destination_color & surface->format->Amask) >> surface->format->Ashift };
-          SDL_Color src;
-
-          if (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
-            src.r = *(source_pixel++);
-            src.g = *(source_pixel++);
+  // Create HarfBuzz buffer for text shaping
+  hb_buffer_t *hb_buffer = hb_buffer_create();
+  if (!hb_buffer) {
+    // Fallback to non-ligature rendering if HarfBuzz fails
+    while (text < end) {
+      unsigned int codepoint, r, g, b;
+      text = utf8_to_codepoint(text, &codepoint);
+      GlyphSet* set = NULL; GlyphMetric* metric = NULL;
+      RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, (int)(fmod(pen_x, 1.0) * SUBPIXEL_BITMAPS_CACHED));
+      if (!metric)
+        break;
+      int start_x = floor(pen_x) + metric->bitmap_left;
+      int end_x = (metric->x1 - metric->x0) + start_x;
+      int glyph_end = metric->x1, glyph_start = metric->x0;
+      if (!metric->loaded && codepoint > 0xFF)
+        ren_draw_rect(rs, (RenRect){ start_x + 1, y, font->space_advance - 1, ren_font_group_get_height(fonts) }, color);
+      if (set->surface && color.a > 0 && end_x >= clip.x && start_x < clip_end_x) {
+        uint8_t* source_pixels = set->surface->pixels;
+        for (int line = metric->y0; line < metric->y1; ++line) {
+          int target_y = line + y - metric->bitmap_top + fonts[0]->baseline * surface_scale;
+          if (target_y < clip.y)
+            continue;
+          if (target_y >= clip_end_y)
+            break;
+          if (start_x + (glyph_end - glyph_start) >= clip_end_x)
+            glyph_end = glyph_start + (clip_end_x - start_x);
+          if (start_x < clip.x) {
+            int offset = clip.x - start_x;
+            start_x += offset;
+            glyph_start += offset;
           }
-          else  {
-            src.r = *(source_pixel);
-            src.g = *(source_pixel);
+          uint32_t* destination_pixel = (uint32_t*)&(destination_pixels[surface->pitch * target_y + start_x * bytes_per_pixel]);
+          uint8_t* source_pixel = &source_pixels[line * set->surface->pitch + glyph_start * (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL ? 3 : 1)];
+          for (int x = glyph_start; x < glyph_end; ++x) {
+            uint32_t destination_color = *destination_pixel;
+            SDL_Color dst = { (destination_color & surface->format->Rmask) >> surface->format->Rshift, (destination_color & surface->format->Gmask) >> surface->format->Gshift, (destination_color & surface->format->Bmask) >> surface->format->Bshift, (destination_color & surface->format->Amask) >> surface->format->Ashift };
+            SDL_Color src;
+
+            if (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
+              src.r = *(source_pixel++);
+              src.g = *(source_pixel++);
+            }
+            else  {
+              src.r = *(source_pixel);
+              src.g = *(source_pixel);
+            }
+
+            src.b = *(source_pixel++);
+            src.a = 0xFF;
+
+            r = (color.r * src.r * color.a + dst.r * (65025 - src.r * color.a) + 32767) / 65025;
+            g = (color.g * src.g * color.a + dst.g * (65025 - src.g * color.a) + 32767) / 65025;
+            b = (color.b * src.b * color.a + dst.b * (65025 - src.b * color.a) + 32767) / 65025;
+            *destination_pixel++ = dst.a << surface->format->Ashift | r << surface->format->Rshift | g << surface->format->Gshift | b << surface->format->Bshift;
           }
-
-          src.b = *(source_pixel++);
-          src.a = 0xFF;
-
-          r = (color.r * src.r * color.a + dst.r * (65025 - src.r * color.a) + 32767) / 65025;
-          g = (color.g * src.g * color.a + dst.g * (65025 - src.g * color.a) + 32767) / 65025;
-          b = (color.b * src.b * color.a + dst.b * (65025 - src.b * color.a) + 32767) / 65025;
-          // the standard way of doing this would be SDL_GetRGBA, but that introduces a performance regression. needs to be investigated
-          *destination_pixel++ = dst.a << surface->format->Ashift | r << surface->format->Rshift | g << surface->format->Gshift | b << surface->format->Bshift;
         }
       }
+
+      float adv = metric->xadvance ? metric->xadvance : font->space_advance;
+
+      if(!last) last = font;
+      else if(font != last || text == end) {
+        double local_pen_x = text == end ? pen_x + adv : pen_x;
+        if (underline)
+          ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height - 1, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+        if (strikethrough)
+          ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height / 2, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+        last = font;
+        last_pen_x = pen_x;
+      }
+
+      pen_x += adv;
     }
+  } else {
+    // Process text with ligature support
+    size_t pos = 0;
+    const char* text_ptr = text;
+    
+    while (pos < len) {
+      const char* ligature = NULL;
+      size_t ligature_len = 0;
+      
+      if (is_ligature_at_position(text, len, pos, &ligature, &ligature_len)) {
+        // Process ligature with HarfBuzz
+        hb_buffer_reset(hb_buffer);
+        hb_buffer_add_utf8(hb_buffer, ligature, -1, 0, -1);
+        hb_buffer_set_direction(hb_buffer, HB_DIRECTION_LTR);
+        hb_buffer_set_script(hb_buffer, HB_SCRIPT_LATIN);
+        hb_buffer_set_language(hb_buffer, hb_language_from_string("en", -1));
+        
+        hb_shape(fonts[0]->hb_font, hb_buffer, NULL, 0);
+        
+        unsigned int glyph_count;
+        hb_glyph_info_t *glyph_info = hb_buffer_get_glyph_infos(hb_buffer, &glyph_count);
+        hb_glyph_position_t *glyph_pos = hb_buffer_get_glyph_positions(hb_buffer, &glyph_count);
+        
+        if (glyph_count > 0) {
+          // Render each glyph from HarfBuzz
+          double start_pen_x = pen_x;
+          
+          for (unsigned int i = 0; i < glyph_count; i++) {
+            FT_UInt glyph_index = glyph_info[i].codepoint;
+            
+            // Load and render the glyph
+            FT_Error ft_error = FT_Load_Glyph(fonts[0]->face, glyph_index, font_set_load_options(fonts[0]));
+            if (ft_error) continue;
+            
+            FT_GlyphSlot slot = fonts[0]->face->glyph;
+            font_set_style(&slot->outline, (int)(fmod(pen_x, 1.0) * 64 / SUBPIXEL_BITMAPS_CACHED), fonts[0]->style);
+            
+            if (FT_Render_Glyph(slot, font_set_render_options(fonts[0]))) continue;
+            
+            // Calculate position
+            int start_x = floor(pen_x) + slot->bitmap_left + (glyph_pos[i].x_offset / 64.0);
+            int end_x = slot->bitmap.width + start_x;
+            
+            // Draw the glyph
+            if (color.a > 0 && end_x >= clip.x && start_x < clip_end_x) {
+              for (unsigned int line = 0; line < slot->bitmap.rows; ++line) {
+                int target_y = line + y - slot->bitmap_top + fonts[0]->baseline * surface_scale + (glyph_pos[i].y_offset / 64.0);
+                if (target_y < clip.y) continue;
+                if (target_y >= clip_end_y) break;
+                
+                int glyph_width = slot->bitmap.width;
+                if (start_x + glyph_width >= clip_end_x)
+                  glyph_width = clip_end_x - start_x;
+                
+                int start_offset = 0;
+                if (start_x < clip.x) {
+                  start_offset = clip.x - start_x;
+                  start_x += start_offset;
+                }
+                
+                uint32_t* destination_pixel = (uint32_t*)&(destination_pixels[surface->pitch * target_y + start_x * bytes_per_pixel]);
+                uint8_t* source_pixel = &slot->bitmap.buffer[line * slot->bitmap.pitch + start_offset];
+                
+                for (int x = start_offset; x < glyph_width; ++x) {
+                  uint32_t destination_color = *destination_pixel;
+                  SDL_Color dst = { 
+                    (destination_color & surface->format->Rmask) >> surface->format->Rshift, 
+                    (destination_color & surface->format->Gmask) >> surface->format->Gshift, 
+                    (destination_color & surface->format->Bmask) >> surface->format->Bshift, 
+                    (destination_color & surface->format->Amask) >> surface->format->Ashift 
+                  };
+                  
+                  uint8_t opacity = fonts[0]->antialiasing == FONT_ANTIALIASING_SUBPIXEL ? 
+                                    source_pixel[x * 3] : source_pixel[x];
+                  
+                  unsigned int r, g, b;
+                  r = (color.r * opacity * color.a + dst.r * (65025 - opacity * color.a) + 32767) / 65025;
+                  g = (color.g * opacity * color.a + dst.g * (65025 - opacity * color.a) + 32767) / 65025;
+                  b = (color.b * opacity * color.a + dst.b * (65025 - opacity * color.a) + 32767) / 65025;
+                  
+                  *destination_pixel++ = dst.a << surface->format->Ashift | 
+                                        r << surface->format->Rshift | 
+                                        g << surface->format->Gshift | 
+                                        b << surface->format->Bshift;
+                }
+              }
+            }
+            
+            // Advance pen position
+            pen_x += glyph_pos[i].x_advance / 64.0;
+          }
+          
+          // Handle underline and strikethrough for the ligature
+          if (underline)
+            ren_draw_rect(rs, (RenRect){start_pen_x / surface_scale, y / surface_scale + fonts[0]->height - 1, 
+                                       (pen_x - start_pen_x) / surface_scale, fonts[0]->underline_thickness}, color);
+          if (strikethrough)
+            ren_draw_rect(rs, (RenRect){start_pen_x / surface_scale, y / surface_scale + fonts[0]->height / 2, 
+                                       (pen_x - start_pen_x) / surface_scale, fonts[0]->underline_thickness}, color);
+          
+          last = fonts[0];
+          last_pen_x = pen_x / surface_scale;
+        } else {
+          // Fallback to rendering individual characters
+          for (size_t i = 0; i < ligature_len; i++) {
+            unsigned int codepoint, r, g, b;
+            text_ptr = utf8_to_codepoint(text + pos + i, &codepoint);
+            GlyphSet* set = NULL; GlyphMetric* metric = NULL;
+            RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, (int)(fmod(pen_x, 1.0) * SUBPIXEL_BITMAPS_CACHED));
+            if (!metric)
+              break;
+            int start_x = floor(pen_x) + metric->bitmap_left;
+            int end_x = (metric->x1 - metric->x0) + start_x;
+            int glyph_end = metric->x1, glyph_start = metric->x0;
+            if (!metric->loaded && codepoint > 0xFF)
+              ren_draw_rect(rs, (RenRect){ start_x + 1, y, font->space_advance - 1, ren_font_group_get_height(fonts) }, color);
+            if (set->surface && color.a > 0 && end_x >= clip.x && start_x < clip_end_x) {
+              uint8_t* source_pixels = set->surface->pixels;
+              for (int line = metric->y0; line < metric->y1; ++line) {
+                int target_y = line + y - metric->bitmap_top + fonts[0]->baseline * surface_scale;
+                if (target_y < clip.y)
+                  continue;
+                if (target_y >= clip_end_y)
+                  break;
+                if (start_x + (glyph_end - glyph_start) >= clip_end_x)
+                  glyph_end = glyph_start + (clip_end_x - start_x);
+                if (start_x < clip.x) {
+                  int offset = clip.x - start_x;
+                  start_x += offset;
+                  glyph_start += offset;
+                }
+                uint32_t* destination_pixel = (uint32_t*)&(destination_pixels[surface->pitch * target_y + start_x * bytes_per_pixel]);
+                uint8_t* source_pixel = &source_pixels[line * set->surface->pitch + glyph_start * (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL ? 3 : 1)];
+                for (int x = glyph_start; x < glyph_end; ++x) {
+                  uint32_t destination_color = *destination_pixel;
+                  SDL_Color dst = { (destination_color & surface->format->Rmask) >> surface->format->Rshift, (destination_color & surface->format->Gmask) >> surface->format->Gshift, (destination_color & surface->format->Bmask) >> surface->format->Bshift, (destination_color & surface->format->Amask) >> surface->format->Ashift };
+                  SDL_Color src;
 
-    float adv = metric->xadvance ? metric->xadvance : font->space_advance;
+                  if (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
+                    src.r = *(source_pixel++);
+                    src.g = *(source_pixel++);
+                  }
+                  else  {
+                    src.r = *(source_pixel);
+                    src.g = *(source_pixel);
+                  }
 
-    if(!last) last = font;
-    else if(font != last || text == end) {
-      double local_pen_x = text == end ? pen_x + adv : pen_x;
-      if (underline)
-        ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height - 1, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
-      if (strikethrough)
-        ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height / 2, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
-      last = font;
-      last_pen_x = pen_x;
+                  src.b = *(source_pixel++);
+                  src.a = 0xFF;
+
+                  r = (color.r * src.r * color.a + dst.r * (65025 - src.r * color.a) + 32767) / 65025;
+                  g = (color.g * src.g * color.a + dst.g * (65025 - src.g * color.a) + 32767) / 65025;
+                  b = (color.b * src.b * color.a + dst.b * (65025 - src.b * color.a) + 32767) / 65025;
+                  *destination_pixel++ = dst.a << surface->format->Ashift | r << surface->format->Rshift | g << surface->format->Gshift | b << surface->format->Bshift;
+                }
+              }
+            }
+
+            float adv = metric->xadvance ? metric->xadvance : font->space_advance;
+
+            if(!last) last = font;
+            else if(font != last || i == ligature_len - 1) {
+              double local_pen_x = i == ligature_len - 1 ? pen_x + adv : pen_x;
+              if (underline)
+                ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height - 1, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+              if (strikethrough)
+                ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height / 2, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+              last = font;
+              last_pen_x = pen_x / surface_scale;
+            }
+
+            pen_x += adv;
+          }
+        }
+        
+        pos += ligature_len;
+        text_ptr = text + pos;
+      } else {
+        // Process regular character
+        unsigned int codepoint, r, g, b;
+        text_ptr = utf8_to_codepoint(text_ptr, &codepoint);
+        GlyphSet* set = NULL; GlyphMetric* metric = NULL;
+        RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, (int)(fmod(pen_x, 1.0) * SUBPIXEL_BITMAPS_CACHED));
+        if (!metric)
+          break;
+        int start_x = floor(pen_x) + metric->bitmap_left;
+        int end_x = (metric->x1 - metric->x0) + start_x;
+        int glyph_end = metric->x1, glyph_start = metric->x0;
+        if (!metric->loaded && codepoint > 0xFF)
+          ren_draw_rect(rs, (RenRect){ start_x + 1, y, font->space_advance - 1, ren_font_group_get_height(fonts) }, color);
+        if (set->surface && color.a > 0 && end_x >= clip.x && start_x < clip_end_x) {
+          uint8_t* source_pixels = set->surface->pixels;
+          for (int line = metric->y0; line < metric->y1; ++line) {
+            int target_y = line + y - metric->bitmap_top + fonts[0]->baseline * surface_scale;
+            if (target_y < clip.y)
+              continue;
+            if (target_y >= clip_end_y)
+              break;
+            if (start_x + (glyph_end - glyph_start) >= clip_end_x)
+              glyph_end = glyph_start + (clip_end_x - start_x);
+            if (start_x < clip.x) {
+              int offset = clip.x - start_x;
+              start_x += offset;
+              glyph_start += offset;
+            }
+            uint32_t* destination_pixel = (uint32_t*)&(destination_pixels[surface->pitch * target_y + start_x * bytes_per_pixel]);
+            uint8_t* source_pixel = &source_pixels[line * set->surface->pitch + glyph_start * (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL ? 3 : 1)];
+            for (int x = glyph_start; x < glyph_end; ++x) {
+              uint32_t destination_color = *destination_pixel;
+              SDL_Color dst = { (destination_color & surface->format->Rmask) >> surface->format->Rshift, (destination_color & surface->format->Gmask) >> surface->format->Gshift, (destination_color & surface->format->Bmask) >> surface->format->Bshift, (destination_color & surface->format->Amask) >> surface->format->Ashift };
+              SDL_Color src;
+
+              if (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
+                src.r = *(source_pixel++);
+                src.g = *(source_pixel++);
+              }
+              else  {
+                src.r = *(source_pixel);
+                src.g = *(source_pixel);
+              }
+
+              src.b = *(source_pixel++);
+              src.a = 0xFF;
+
+              r = (color.r * src.r * color.a + dst.r * (65025 - src.r * color.a) + 32767) / 65025;
+              g = (color.g * src.g * color.a + dst.g * (65025 - src.g * color.a) + 32767) / 65025;
+              b = (color.b * src.b * color.a + dst.b * (65025 - src.b * color.a) + 32767) / 65025;
+              *destination_pixel++ = dst.a << surface->format->Ashift | r << surface->format->Rshift | g << surface->format->Gshift | b << surface->format->Bshift;
+            }
+          }
+        }
+
+        float adv = metric->xadvance ? metric->xadvance : font->space_advance;
+
+        if(!last) last = font;
+        else if(font != last || text_ptr >= end) {
+          double local_pen_x = text_ptr >= end ? pen_x + adv : pen_x;
+          if (underline)
+            ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height - 1, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+          if (strikethrough)
+            ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height / 2, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+          last = font;
+          last_pen_x = pen_x / surface_scale;
+        }
+
+        pen_x += adv;
+        pos = text_ptr - text;
+      }
     }
-
-    pen_x += adv;
+    
+    hb_buffer_destroy(hb_buffer);
   }
+  
   return pen_x / surface_scale;
 }
 
