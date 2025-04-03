@@ -29,6 +29,15 @@
 
 RenWindow window_renderer = {0};
 static FT_Library library;
+static hb_buffer_t *hb_buffer; // Global HarfBuzz buffer
+
+// Predefined ligature sequences
+static const char* ligature_strings[] = {
+  "<=", ">=", "==", "!=", "->", "&&", "||", ">>", "<<", "//", "/*", "*/", "++", "--"
+  // Add more ligatures here if needed
+};
+static const int num_ligatures = sizeof(ligature_strings) / sizeof(ligature_strings[0]);
+
 
 // draw_rect_surface is used as a 1x1 surface to simplify ren_draw_rect with blending
 static SDL_Surface *draw_rect_surface;
