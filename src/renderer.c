@@ -652,10 +652,27 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
         FT_UInt glyph_index = ligature_info[i].codepoint;
         hb_glyph_position_t *pos = &ligature_pos[i];
 
-        // Load and render the glyph using FreeType
-        FT_Error ft_error = FT_Load_Glyph(current_font->face, glyph_index, font_set_load_options(current_font) | FT_LOAD_RENDER);
+        // Load glyph data first (without rendering)
+        FT_Error ft_error = FT_Load_Glyph(current_font->face, glyph_index, font_set_load_options(current_font));
         if (ft_error) {
-          fprintf(stderr, "Warning: Could not load/render glyph index %u for ligature\n", glyph_index);
+           fprintf(stderr, "Warning: Could not load glyph index %u for ligature\n", glyph_index);
+           // Advance pen position even if glyph fails
+           pen_x += pos->x_advance / 64.0;
+           pen_y += pos->y_advance / 64.0;
+           continue;
+        }
+
+        // Apply style transformations (e.g., bold, italic) to the outline
+        // We need to determine the correct subpixel shift based on the *current* pen position,
+        // similar to how font_load_glyphset does it, although HarfBuzz handles positioning.
+        // For simplicity here, let's use 0 shift, as HarfBuzz provides the precise offsets.
+        // If subpixel positioning artifacts appear, this might need refinement.
+        font_set_style(&current_font->face->glyph->outline, 0, current_font->style);
+
+        // Now render the styled glyph
+        ft_error = FT_Render_Glyph(current_font->face->glyph, font_set_render_options(current_font));
+        if (ft_error) {
+          fprintf(stderr, "Warning: Could not render glyph index %u for ligature\n", glyph_index);
           // Advance pen position even if glyph fails
           pen_x += pos->x_advance / 64.0;
           pen_y += pos->y_advance / 64.0;
