@@ -9,6 +9,10 @@
 #include FT_OUTLINE_H
 #include FT_SYSTEM_H
 
+// HarfBuzz Headers
+#include <hb.h>
+#include <hb-ft.h> // HarfBuzz FreeType integration
+
 #ifdef _WIN32
 #include <windows.h>
 #include "utfconv.h"
@@ -56,6 +60,7 @@ typedef struct {
 
 typedef struct RenFont {
   FT_Face face;
+  hb_font_t *hb_font; // HarfBuzz font object
   FT_StreamRec stream;
   GlyphSet* sets[SUBPIXEL_BITMAPS_CACHED][MAX_LOADABLE_GLYPHSETS];
   float size, space_advance, tab_advance;
@@ -246,6 +251,8 @@ static unsigned long font_file_read(FT_Stream stream, unsigned long offset, unsi
 }
 
 static void font_file_close(FT_Stream stream) {
+  // Note: HarfBuzz might hold a reference to the FT_Face, which holds the stream.
+  // Ensure hb_font_destroy is called before FT_Done_Face, which might trigger this close.
   if (stream && stream->descriptor.pointer) {
     SDL_RWclose((SDL_RWops *) stream->descriptor.pointer);
     stream->descriptor.pointer = NULL;
@@ -285,6 +292,15 @@ RenFont* ren_font_load(RenWindow *window_renderer, const char* path, float size,
   font->hinting = hinting;
   font->style = style;
 
+  // Create HarfBuzz font
+  font->hb_font = hb_ft_font_create_referenced(face);
+  if (!font->hb_font) {
+    fprintf(stderr, "Warning: Could not create HarfBuzz font for %s\n", path);
+    // Continue without HarfBuzz support for this font? Or fail harder?
+    // Let's allow it to continue for now, ligatures just won't work.
+  }
+
+
   if(FT_IS_SCALABLE(face))
     font->underline_thickness = (unsigned short)((face->underline_thickness / (float)face->units_per_EM) * font->size);
   if(!font->underline_thickness)
@@ -298,8 +314,12 @@ RenFont* ren_font_load(RenWindow *window_renderer, const char* path, float size,
   return font;
 
 failure:
+  if (font && font->hb_font) {
+    hb_font_destroy(font->hb_font); // Destroys hb_font, decreases ft_face ref count
+    font->hb_font = NULL;
+  }
   if (face)
-    FT_Done_Face(face);
+    FT_Done_Face(face); // May free face if ref count is 0
   if (font)
     free(font);
   return NULL;
@@ -332,8 +352,13 @@ int ren_font_get_scale(RenFont *font) {
 }
 
 void ren_font_free(RenFont* font) {
+  if (!font) return;
   font_clear_glyph_cache(font);
-  FT_Done_Face(font->face);
+  if (font->hb_font) {
+    hb_font_destroy(font->hb_font); // Decrements ft_face ref count
+    font->hb_font = NULL;
+  }
+  FT_Done_Face(font->face); // Decrements ft_face ref count again
   free(font);
 }
 
@@ -370,6 +395,10 @@ void ren_font_group_set_size(RenWindow *window_renderer, RenFont **fonts, float 
     FT_Load_Char(face, ' ', font_set_load_options(fonts[i]));
     fonts[i]->space_advance = face->glyph->advance.x / 64.0f;
     fonts[i]->tab_advance = fonts[i]->space_advance * 2;
+    // Notify HarfBuzz that font parameters might have changed
+    if (fonts[i]->hb_font) {
+      hb_ft_font_changed(fonts[i]->hb_font);
+    }
   }
 }
 
@@ -377,124 +406,360 @@ int ren_font_group_get_height(RenFont **fonts) {
   return fonts[0]->height;
 }
 
+
+// Helper to check for and process a ligature at the current text position
+static const char* process_ligature(RenFont **fonts, const char *text, const char *end, double *advance_out, int *glyph_count_out, hb_glyph_info_t **glyph_info_out, hb_glyph_position_t **glyph_pos_out) {
+    if (!hb_buffer || !fonts[0]->hb_font) {
+        return NULL; // HarfBuzz not available or not initialized for this font
+    }
+
+    const char* best_match_end = NULL;
+    const char* best_ligature_str = NULL;
+
+    // Find the longest matching ligature string at the current position
+    for (int i = 0; i < num_ligatures; ++i) {
+        const char* ligature = ligature_strings[i];
+        size_t lig_len = strlen(ligature);
+        if ((size_t)(end - text) >= lig_len && strncmp(text, ligature, lig_len) == 0) {
+            if (!best_match_end || lig_len > strlen(best_ligature_str)) {
+                 best_match_end = text + lig_len;
+                 best_ligature_str = ligature;
+            }
+        }
+    }
+
+    if (best_match_end) {
+        // Found a ligature, shape it with HarfBuzz
+        hb_buffer_reset(hb_buffer);
+        hb_buffer_add_utf8(hb_buffer, best_ligature_str, -1, 0, -1);
+        hb_buffer_set_direction(hb_buffer, HB_DIRECTION_LTR);
+        hb_buffer_set_script(hb_buffer, HB_SCRIPT_LATIN); // Assuming Latin script for common ligatures
+        hb_buffer_set_language(hb_buffer, hb_language_from_string("en", -1));
+
+        hb_shape(fonts[0]->hb_font, hb_buffer, NULL, 0); // Use primary font for shaping
+
+        unsigned int hb_glyph_count;
+        *glyph_info_out = hb_buffer_get_glyph_infos(hb_buffer, &hb_glyph_count);
+        *glyph_pos_out = hb_buffer_get_glyph_positions(hb_buffer, &hb_glyph_count);
+        *glyph_count_out = (int)hb_glyph_count;
+
+        // Calculate total advance width from HarfBuzz positions
+        *advance_out = 0;
+        for (unsigned int i = 0; i < hb_glyph_count; ++i) {
+            *advance_out += (*glyph_pos_out)[i].x_advance / 64.0;
+        }
+        return best_match_end; // Return pointer to the end of the processed ligature
+    }
+
+    return NULL; // No ligature found at this position
+}
+
+
 double ren_font_group_get_width(RenFont **fonts, const char *text, size_t len, int *x_offset) {
   double width = 0;
   const char* end = text + len;
+  const char* current_text = text;
   GlyphMetric* metric = NULL; GlyphSet* set = NULL;
   bool set_x_offset = x_offset == NULL;
   int surface_scale = -1;
-  while (text < end) {
-    unsigned int codepoint;
-    text = utf8_to_codepoint(text, &codepoint);
-    RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, 0);
-    /* we assume font is not NULL here because the previous function always return
-       a non-null font except is a null metric pointer is provided. */
-    assert(font != NULL);
-    if (surface_scale < 0) {
-      surface_scale = ren_font_get_scale(font);
-    }
-    if (!metric)
-      break;
-    width += metric->xadvance ? metric->xadvance : fonts[0]->space_advance;
-    if (!set_x_offset) {
-      set_x_offset = true;
-      *x_offset = metric->bitmap_left; // TODO: should this be scaled by the surface scale?
+
+  while (current_text < end) {
+    double ligature_advance = 0;
+    int ligature_glyph_count = 0;
+    hb_glyph_info_t *ligature_info = NULL;
+    hb_glyph_position_t *ligature_pos = NULL;
+
+    // Try to process a ligature
+    const char* next_text = process_ligature(fonts, current_text, end, &ligature_advance, &ligature_glyph_count, &ligature_info, &ligature_pos);
+
+    if (next_text) {
+      // Ligature processed by HarfBuzz
+      if (surface_scale < 0 && fonts[0]) {
+          surface_scale = ren_font_get_scale(fonts[0]);
+      }
+      width += ligature_advance;
+      current_text = next_text;
+
+      // Set x_offset based on the first glyph of the ligature (if needed)
+      if (!set_x_offset && ligature_glyph_count > 0) {
+          set_x_offset = true;
+          // Need to load the glyph to get bitmap_left, similar to non-ligature path
+          RenFont* font = fonts[0]; // Assume primary font for metrics
+          FT_UInt glyph_index = ligature_info[0].codepoint;
+          if (FT_Load_Glyph(font->face, glyph_index, font_set_load_options(font) | FT_LOAD_BITMAP_METRICS_ONLY) == 0) {
+              *x_offset = font->face->glyph->bitmap_left; // TODO: Scale?
+          } else {
+              *x_offset = 0; // Fallback
+          }
+      }
+
+    } else {
+      // Process a single character using FreeType
+      unsigned int codepoint;
+      next_text = utf8_to_codepoint(current_text, &codepoint);
+      RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, 0);
+      assert(font != NULL); // Should always return a font
+
+      if (surface_scale < 0) {
+        surface_scale = ren_font_get_scale(font);
+      }
+      if (!metric) { // Should not happen if font_group_get_glyph works correctly
+        current_text = next_text;
+        continue;
+      }
+
+      width += metric->xadvance ? metric->xadvance : fonts[0]->space_advance;
+
+      if (!set_x_offset) {
+        set_x_offset = true;
+        *x_offset = metric->bitmap_left; // TODO: should this be scaled by the surface scale?
+      }
+      current_text = next_text;
     }
   }
-  if (!set_x_offset) {
+
+  if (x_offset && !set_x_offset) { // Handle empty string case
     *x_offset = 0;
   }
+
   return width / surface_scale;
 }
 
+
+// Helper to draw a single glyph bitmap (used by both standard and HarfBuzz paths)
+static void draw_glyph_bitmap(RenSurface *rs, RenFont* font, FT_Bitmap *bitmap, int x, int y, RenColor color) {
+    SDL_Surface *surface = rs->surface;
+    if (!surface || color.a == 0 || bitmap->width == 0 || bitmap->rows == 0) return;
+
+    SDL_Rect clip;
+    SDL_GetClipRect(surface, &clip);
+
+    int surface_scale = rs->scale; // Assumes font scale matches surface scale
+    int bytes_per_pixel = surface->format->BytesPerPixel;
+    uint8_t* destination_pixels = surface->pixels;
+    int clip_end_x = clip.x + clip.w, clip_end_y = clip.y + clip.h;
+
+    unsigned int src_bytes_per_pixel = 1;
+    if (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
+        src_bytes_per_pixel = 3;
+    } else if (font->antialiasing == FONT_ANTIALIASING_NONE) {
+        // Mono bitmaps are handled differently below
+    }
+
+    for (unsigned int line = 0; line < bitmap->rows; ++line) {
+        int target_y = y + line;
+        if (target_y < clip.y || target_y >= clip_end_y) continue;
+
+        int start_x = x;
+        int end_x = x + (font->antialiasing == FONT_ANTIALIASING_NONE ? bitmap->width * 8 : bitmap->width / src_bytes_per_pixel); // Adjust width for mono/subpixel
+        int glyph_start_col = 0; // Column index within the source bitmap
+
+        if (end_x <= clip.x || start_x >= clip_end_x) continue;
+
+        // Manual clipping for the row
+        if (start_x < clip.x) {
+            glyph_start_col += (clip.x - start_x);
+            start_x = clip.x;
+        }
+        if (end_x > clip_end_x) {
+            end_x = clip_end_x;
+        }
+
+        uint32_t* destination_pixel = (uint32_t*)&(destination_pixels[surface->pitch * target_y + start_x * bytes_per_pixel]);
+        uint8_t* source_pixel_row = &bitmap->buffer[line * bitmap->pitch];
+
+        for (int current_x = start_x; current_x < end_x; ++current_x, ++glyph_start_col) {
+            uint32_t destination_color = *destination_pixel;
+            SDL_Color dst = { (destination_color & surface->format->Rmask) >> surface->format->Rshift, (destination_color & surface->format->Gmask) >> surface->format->Gshift, (destination_color & surface->format->Bmask) >> surface->format->Bshift, (destination_color & surface->format->Amask) >> surface->format->Ashift };
+            SDL_Color src = {0, 0, 0, 0xFF}; // Default alpha
+            unsigned int r, g, b;
+
+            if (font->antialiasing == FONT_ANTIALIASING_NONE) {
+                int source_byte_idx = glyph_start_col / 8;
+                int source_bit_idx = 7 - (glyph_start_col % 8);
+                uint8_t source_val = (source_pixel_row[source_byte_idx] >> source_bit_idx) & 0x1;
+                src.r = src.g = src.b = source_val * 0xFF;
+            } else if (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
+                uint8_t* p = &source_pixel_row[glyph_start_col * src_bytes_per_pixel];
+                src.r = p[0];
+                src.g = p[1];
+                src.b = p[2];
+            } else { // Grayscale
+                src.r = src.g = src.b = source_pixel_row[glyph_start_col * src_bytes_per_pixel];
+            }
+
+            // Alpha Blending (Premultiplied Alpha)
+            r = (color.r * src.r * color.a + dst.r * (65025 - src.r * color.a) + 32767) / 65025;
+            g = (color.g * src.g * color.a + dst.g * (65025 - src.g * color.a) + 32767) / 65025;
+            b = (color.b * src.b * color.a + dst.b * (65025 - src.b * color.a) + 32767) / 65025;
+
+            *destination_pixel++ = dst.a << surface->format->Ashift | r << surface->format->Rshift | g << surface->format->Gshift | b << surface->format->Bshift;
+        }
+    }
+}
+
+
 double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t len, float x, int y, RenColor color) {
-  SDL_Surface *surface = rs->surface;
-  SDL_Rect clip;
-  SDL_GetClipRect(surface, &clip);
+  if (!rs->surface || color.a == 0) { return x; } // Nothing to draw or fully transparent
 
   const int surface_scale = rs->scale;
-  double pen_x = x * surface_scale;
-  y *= surface_scale;
-  int bytes_per_pixel = surface->format->BytesPerPixel;
-  const char* end = text + len;
-  uint8_t* destination_pixels = surface->pixels;
-  int clip_end_x = clip.x + clip.w, clip_end_y = clip.y + clip.h;
+  double pen_x = x * surface_scale; // Pen position in surface pixels
+  double pen_y = 0; // For vertical positioning if needed by HarfBuzz (usually 0 for LTR)
+  int base_y = y * surface_scale; // Baseline y in surface pixels
 
-  RenFont* last = NULL;
-  double last_pen_x = x;
+  const char* current_text = text;
+  const char* end = text + len;
+
+  RenFont* last_font_for_line = NULL; // Track font for underline/strikethrough segments
+  double segment_start_pen_x = pen_x; // Track start x for underline/strikethrough
+
   bool underline = fonts[0]->style & FONT_STYLE_UNDERLINE;
   bool strikethrough = fonts[0]->style & FONT_STYLE_STRIKETHROUGH;
 
-  while (text < end) {
-    unsigned int codepoint, r, g, b;
-    text = utf8_to_codepoint(text, &codepoint);
-    GlyphSet* set = NULL; GlyphMetric* metric = NULL;
-    RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, (int)(fmod(pen_x, 1.0) * SUBPIXEL_BITMAPS_CACHED));
-    if (!metric)
-      break;
-    int start_x = floor(pen_x) + metric->bitmap_left;
-    int end_x = (metric->x1 - metric->x0) + start_x;
-    int glyph_end = metric->x1, glyph_start = metric->x0;
-    if (!metric->loaded && codepoint > 0xFF)
-      ren_draw_rect(rs, (RenRect){ start_x + 1, y, font->space_advance - 1, ren_font_group_get_height(fonts) }, color);
-    if (set->surface && color.a > 0 && end_x >= clip.x && start_x < clip_end_x) {
-      uint8_t* source_pixels = set->surface->pixels;
-      for (int line = metric->y0; line < metric->y1; ++line) {
-        int target_y = line + y - metric->bitmap_top + fonts[0]->baseline * surface_scale;
-        if (target_y < clip.y)
-          continue;
-        if (target_y >= clip_end_y)
-          break;
-        if (start_x + (glyph_end - glyph_start) >= clip_end_x)
-          glyph_end = glyph_start + (clip_end_x - start_x);
-        if (start_x < clip.x) {
-          int offset = clip.x - start_x;
-          start_x += offset;
-          glyph_start += offset;
-        }
-        uint32_t* destination_pixel = (uint32_t*)&(destination_pixels[surface->pitch * target_y + start_x * bytes_per_pixel]);
-        uint8_t* source_pixel = &source_pixels[line * set->surface->pitch + glyph_start * (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL ? 3 : 1)];
-        for (int x = glyph_start; x < glyph_end; ++x) {
-          uint32_t destination_color = *destination_pixel;
-          // the standard way of doing this would be SDL_GetRGBA, but that introduces a performance regression. needs to be investigated
-          SDL_Color dst = { (destination_color & surface->format->Rmask) >> surface->format->Rshift, (destination_color & surface->format->Gmask) >> surface->format->Gshift, (destination_color & surface->format->Bmask) >> surface->format->Bshift, (destination_color & surface->format->Amask) >> surface->format->Ashift };
-          SDL_Color src;
+  while (current_text < end) {
+    double ligature_advance = 0;
+    int ligature_glyph_count = 0;
+    hb_glyph_info_t *ligature_info = NULL;
+    hb_glyph_position_t *ligature_pos = NULL;
+    RenFont* current_font = fonts[0]; // Use primary font by default
 
-          if (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
-            src.r = *(source_pixel++);
-            src.g = *(source_pixel++);
-          }
-          else  {
-            src.r = *(source_pixel);
-            src.g = *(source_pixel);
-          }
+    // Try to process a ligature
+    const char* next_text = process_ligature(fonts, current_text, end, &ligature_advance, &ligature_glyph_count, &ligature_info, &ligature_pos);
 
-          src.b = *(source_pixel++);
-          src.a = 0xFF;
+    if (next_text && ligature_glyph_count > 0) {
+      // --- Render Ligature using HarfBuzz results ---
+      current_font = fonts[0]; // Assume primary font shaped the ligature
 
-          r = (color.r * src.r * color.a + dst.r * (65025 - src.r * color.a) + 32767) / 65025;
-          g = (color.g * src.g * color.a + dst.g * (65025 - src.g * color.a) + 32767) / 65025;
-          b = (color.b * src.b * color.a + dst.b * (65025 - src.b * color.a) + 32767) / 65025;
-          // the standard way of doing this would be SDL_GetRGBA, but that introduces a performance regression. needs to be investigated
-          *destination_pixel++ = dst.a << surface->format->Ashift | r << surface->format->Rshift | g << surface->format->Gshift | b << surface->format->Bshift;
-        }
+      // Apply underline/strikethrough for the previous segment if font changes
+      if (last_font_for_line && current_font != last_font_for_line) {
+          if (underline) ren_draw_rect(rs, (RenRect){segment_start_pen_x / surface_scale, y + last_font_for_line->height - 1, (pen_x - segment_start_pen_x) / surface_scale, last_font_for_line->underline_thickness}, color);
+          if (strikethrough) ren_draw_rect(rs, (RenRect){segment_start_pen_x / surface_scale, y + last_font_for_line->height / 2, (pen_x - segment_start_pen_x) / surface_scale, last_font_for_line->underline_thickness}, color);
+          segment_start_pen_x = pen_x;
       }
+      last_font_for_line = current_font;
+
+
+      for (int i = 0; i < ligature_glyph_count; ++i) {
+        FT_UInt glyph_index = ligature_info[i].codepoint;
+        hb_glyph_position_t *pos = &ligature_pos[i];
+
+        // Load and render the glyph using FreeType
+        FT_Error ft_error = FT_Load_Glyph(current_font->face, glyph_index, font_set_load_options(current_font) | FT_LOAD_RENDER);
+        if (ft_error) {
+          fprintf(stderr, "Warning: Could not load/render glyph index %u for ligature\n", glyph_index);
+          // Advance pen position even if glyph fails
+          pen_x += pos->x_advance / 64.0;
+          pen_y += pos->y_advance / 64.0;
+          continue;
+        }
+
+        FT_GlyphSlot slot = current_font->face->glyph;
+
+        // Calculate draw position using HarfBuzz offsets and FreeType bearings
+        // pen_x/y = current pen position (bottom-left for FT?)
+        // draw_x = pen_x + hb_x_offset + ft_bitmap_left
+        // draw_y = baseline_y - ft_bitmap_top + hb_y_offset + pen_y
+        int draw_x = round(pen_x + (pos->x_offset / 64.0) + slot->bitmap_left);
+        int draw_y = round(base_y + current_font->baseline * surface_scale - slot->bitmap_top + (pos->y_offset / 64.0) + pen_y);
+
+        // Draw the bitmap using the helper function
+        draw_glyph_bitmap(rs, current_font, &slot->bitmap, draw_x, draw_y, color);
+
+        // Advance the pen position using HarfBuzz's advances
+        pen_x += pos->x_advance / 64.0;
+        pen_y += pos->y_advance / 64.0;
+      }
+      current_text = next_text; // Move past the processed ligature
+
+    } else {
+      // --- Render Single Character using existing FreeType path ---
+      unsigned int codepoint;
+      next_text = utf8_to_codepoint(current_text, &codepoint);
+      GlyphSet* set = NULL; GlyphMetric* metric = NULL;
+
+      // Determine subpixel index based on fractional pen position
+      int subpixel_idx = (int)(fmod(pen_x, 1.0) * SUBPIXEL_BITMAPS_CACHED);
+      current_font = font_group_get_glyph(&set, &metric, fonts, codepoint, subpixel_idx);
+
+      if (!metric) { // Should not happen
+          current_text = next_text;
+          continue;
+      }
+
+      // Apply underline/strikethrough for the previous segment if font changes
+      if (last_font_for_line && current_font != last_font_for_line) {
+          if (underline) ren_draw_rect(rs, (RenRect){segment_start_pen_x / surface_scale, y + last_font_for_line->height - 1, (pen_x - segment_start_pen_x) / surface_scale, last_font_for_line->underline_thickness}, color);
+          if (strikethrough) ren_draw_rect(rs, (RenRect){segment_start_pen_x / surface_scale, y + last_font_for_line->height / 2, (pen_x - segment_start_pen_x) / surface_scale, last_font_for_line->underline_thickness}, color);
+          segment_start_pen_x = pen_x;
+      }
+      last_font_for_line = current_font;
+
+
+      // Calculate draw position (relative to baseline)
+      int draw_x = floor(pen_x) + metric->bitmap_left;
+      int draw_y = base_y + current_font->baseline * surface_scale - metric->bitmap_top;
+
+      // Draw placeholder for missing glyphs > 255
+      if (!metric->loaded && codepoint > 0xFF) {
+          ren_draw_rect(rs, (RenRect){(float)draw_x / surface_scale + 1, (float)y, (current_font->space_advance - 1) / surface_scale, (float)ren_font_group_get_height(fonts)}, color);
+      }
+
+      // Render the glyph from the pre-rendered GlyphSet surface
+      if (set && set->surface && metric->loaded && color.a > 0) {
+          SDL_Rect src_rect = { metric->x0, metric->y0, metric->x1 - metric->x0, metric->y1 - metric->y0 };
+          SDL_Rect dst_rect = { draw_x, draw_y, src_rect.w, src_rect.h };
+
+          // Manual Blitting with Alpha Blend (similar logic to draw_glyph_bitmap but uses GlyphSet)
+          // This part needs careful review and integration with the draw_glyph_bitmap logic
+          // For simplicity, let's reuse the core blending logic if possible, but source is different.
+          // *** This section needs careful implementation matching draw_glyph_bitmap's blending ***
+          // Simplified placeholder: SDL_BlitSurface(set->surface, &src_rect, rs->surface, &dst_rect); // Needs alpha blending!
+
+          // Replicating blending logic here (needs testing and refinement):
+          SDL_Surface *source_surface = set->surface;
+          SDL_Surface *dest_surface = rs->surface;
+          SDL_Rect clip; SDL_GetClipRect(dest_surface, &clip);
+          if (SDL_IntersectRect(&dst_rect, &clip, &dst_rect)) {
+              uint8_t* source_pixels = source_surface->pixels;
+              uint8_t* dest_pixels = dest_surface->pixels;
+              int src_bpp = source_surface->format->BytesPerPixel; // Should be 1 (gray) or 3 (subpixel)
+              int dst_bpp = dest_surface->format->BytesPerPixel;
+
+              for (int row = 0; row < dst_rect.h; ++row) {
+                  uint8_t* src_p = source_pixels + (src_rect.y + row) * source_surface->pitch + src_rect.x * src_bpp;
+                  uint32_t* dst_p = (uint32_t*)(dest_pixels + (dst_rect.y + row) * dest_surface->pitch + dst_rect.x * dst_bpp);
+
+                  for (int col = 0; col < dst_rect.w; ++col) {
+                      uint32_t destination_color = *dst_p;
+                      SDL_Color dst = { (destination_color & dest_surface->format->Rmask) >> dest_surface->format->Rshift, (destination_color & dest_surface->format->Gmask) >> dest_surface->format->Gshift, (destination_color & dest_surface->format->Bmask) >> dest_surface->format->Bshift, (destination_color & dest_surface->format->Amask) >> dest_surface->format->Ashift };
+                      SDL_Color src = {0, 0, 0, 0xFF};
+                      unsigned int r, g, b;
+
+                      if (current_font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
+                          src.r = *(src_p++); src.g = *(src_p++); src.b = *(src_p++);
+                      } else { // Grayscale or Mono (GlyphSet stores mono as grayscale 0/255)
+                          src.r = src.g = src.b = *(src_p++);
+                      }
+
+                      r = (color.r * src.r * color.a + dst.r * (65025 - src.r * color.a) + 32767) / 65025;
+                      g = (color.g * src.g * color.a + dst.g * (65025 - src.g * color.a) + 32767) / 65025;
+                      b = (color.b * src.b * color.a + dst.b * (65025 - src.b * color.a) + 32767) / 65025;
+                      *dst_p++ = dst.a << dest_surface->format->Ashift | r << dest_surface->format->Rshift | g << dest_surface->format->Gshift | b << dest_surface->format->Bshift;
+                  }
+              }
+          }
+      }
+
+      // Advance pen position using FreeType metrics
+      pen_x += metric->xadvance ? metric->xadvance : current_font->space_advance;
+      current_text = next_text;
     }
+  }
 
-    float adv = metric->xadvance ? metric->xadvance : font->space_advance;
-
-    if(!last) last = font;
-    else if(font != last || text == end) {
-      double local_pen_x = text == end ? pen_x + adv : pen_x;
-      if (underline)
-        ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height - 1, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
-      if (strikethrough)
-        ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height / 2, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
-      last = font;
-      last_pen_x = pen_x;
-    }
-
-    pen_x += adv;
+  // Apply underline/strikethrough for the final segment
+  if (last_font_for_line) {
+      if (underline) ren_draw_rect(rs, (RenRect){segment_start_pen_x / surface_scale, y + last_font_for_line->height - 1, (pen_x - segment_start_pen_x) / surface_scale, last_font_for_line->underline_thickness}, color);
+      if (strikethrough) ren_draw_rect(rs, (RenRect){segment_start_pen_x / surface_scale, y + last_font_for_line->height / 2, (pen_x - segment_start_pen_x) / surface_scale, last_font_for_line->underline_thickness}, color);
   }
   return pen_x / surface_scale;
 }
@@ -530,16 +795,30 @@ void ren_draw_rect(RenSurface *rs, RenRect rect, RenColor color) {
 void ren_free_window_resources(RenWindow *window_renderer) {
   renwin_free(window_renderer);
   SDL_FreeSurface(draw_rect_surface);
+  if (hb_buffer) {
+    hb_buffer_destroy(hb_buffer);
+    hb_buffer = NULL;
+  }
+  FT_Done_FreeType(library); // Free FreeType library
 }
 
 // TODO remove global and return RenWindow*
 void ren_init(SDL_Window *win) {
   assert(win);
-  int error = FT_Init_FreeType( &library );
-  if ( error ) {
-    fprintf(stderr, "internal font error when starting the application\n");
-    return;
+  int error = FT_Init_FreeType(&library);
+  if (error) {
+    fprintf(stderr, "Fatal: Could not initialize FreeType library\n");
+    exit(EXIT_FAILURE); // Cannot proceed without FreeType
   }
+
+  // Initialize HarfBuzz buffer
+  hb_buffer = hb_buffer_create();
+   if (!hb_buffer) {
+    fprintf(stderr, "Fatal: Could not create HarfBuzz buffer\n");
+    FT_Done_FreeType(library);
+    exit(EXIT_FAILURE); // Cannot proceed without HarfBuzz buffer
+  }
+
   window_renderer.window = win;
   renwin_init_renderer(&window_renderer);
   // renwin_clip_to_surface(&window_renderer);
