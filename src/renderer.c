@@ -854,8 +854,6 @@ double ren_draw_text_hb(RenSurface *rs, RenFont **fonts, const char *text,
 
   double pen_x = x * surface_scale;
   int base_y   = y * surface_scale;
-  int bpp      = surface->format->BytesPerPixel;
-  uint8_t *dest_pixels = surface->pixels;
 
   /* -------- HarfBuzz shaping -------- */
   if (!hb_draw_buf)
@@ -895,45 +893,22 @@ double ren_draw_text_hb(RenSurface *rs, RenFont **fonts, const char *text,
       continue;
     }
 
-    const uint8_t *src_pixels = set->surface->pixels;
-    int byte_width = fonts[0]->antialiasing == FONT_ANTIALIASING_SUBPIXEL ? 3 : 1;
+    /* ---- actual blit ---- */
+    const bool is_subpixel = fonts[0]->antialiasing == FONT_ANTIALIASING_SUBPIXEL;
+    const int  byte_width  = is_subpixel ? 3 : 1;
 
-    for (int row = metric->y0; row < metric->y1; ++row) {
-      int dy = glyph_y + row - metric->y0;
-      if (dy < clip.y || dy >= clip_end_y) continue;
+    /* pointer to the first byte of the glyph bitmap we want       */
+    const uint8_t *glyph_src =
+      (const uint8_t *)set->surface->pixels + metric->y0 * set->surface->pitch +
+      metric->x0 * byte_width;
 
-      const uint8_t *src = &src_pixels[row * set->surface->pitch + metric->x0 * byte_width];
-      uint32_t *dst = (uint32_t *)&dest_pixels[surface->pitch * dy + glyph_x * bpp];
+    const int glyph_w = metric->x1 - metric->x0;
+    const int glyph_h = metric->y1 - metric->y0;
 
-      for (int col = metric->x0; col < metric->x1; ++col) {
-        int dx = glyph_x + col - metric->x0;
-        if (dx < clip.x || dx >= clip_end_x) { ++dst; src += byte_width; continue; }
+    blit_glyph(surface, glyph_src, set->surface->pitch,
+               glyph_w, glyph_h, glyph_x, glyph_y,
+               &clip, color, is_subpixel);
 
-        uint8_t src_r, src_g, src_b;
-        if (fonts[0]->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
-          src_r = src[0]; src_g = src[1]; src_b = src[2];
-          src += 3;
-        } else {
-          src_r = src_g = src_b = *src;
-          ++src;
-        }
-        uint8_t src_a = src_r;
-        if (src_a == 0) { ++dst; continue; }
-
-        uint32_t dst_pix = *dst;
-        SDL_Color d = { (dst_pix & surface->format->Rmask)>>surface->format->Rshift,
-                        (dst_pix & surface->format->Gmask)>>surface->format->Gshift,
-                        (dst_pix & surface->format->Bmask)>>surface->format->Bshift,
-                        (dst_pix & surface->format->Amask)>>surface->format->Ashift };
-        uint32_t r = (color.r * src_r * color.a + d.r * (65025 - src_r * color.a) + 32767) / 65025;
-        uint32_t g = (color.g * src_g * color.a + d.g * (65025 - src_g * color.a) + 32767) / 65025;
-        uint32_t b = (color.b * src_b * color.a + d.b * (65025 - src_b * color.a) + 32767) / 65025;
-        *dst++ = d.a << surface->format->Ashift |
-                 r   << surface->format->Rshift |
-                 g   << surface->format->Gshift |
-                 b   << surface->format->Bshift;
-      }
-    }
     pen_x += pos[i].x_advance / 64.0;
   }
 
