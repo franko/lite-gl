@@ -58,20 +58,13 @@ static RenRect scaled_rect(const RenRect rect, const int scale) {
  * “fast‑path” ASCII sia da quello HarfBuzz, evitando duplicazione di ~150
  * righe di codice.  Modifiche future al blending vanno fatte solo qui.
  * --------------------------------------------------------------------- */
-static inline void blit_glyph(SDL_Surface *surface,
-                              const uint8_t *src_pixels,
-                              int src_pitch,
-                              int byte_width,
-                              int glyph_w,
-                              int glyph_h,
-                              int dst_x,
-                              int dst_y,
-                              const SDL_Rect *clip,
-                              RenColor color,
-                              bool is_subpixel)
+static void blit_glyph(SDL_Surface *surface,
+                       const uint8_t *src_pixels, int src_pitch,
+                       int glyph_w, int glyph_h,
+                       int dst_x, int dst_y,
+                       const SDL_Rect *clip, RenColor color,
+                       bool is_subpixel)
 {
-  if (color.a == 0 || !surface || !src_pixels) return;
-
   const int clip_end_x = clip->x + clip->w;
   const int clip_end_y = clip->y + clip->h;
 
@@ -571,7 +564,7 @@ static void font_file_close(FT_Stream stream) {
 RenFont* ren_font_load(RenWindow *window_renderer, const char* path, float size, ERenFontAntialiasing antialiasing, ERenFontHinting hinting, unsigned char style) {
   RenFont *font = NULL;
   FT_Face face = NULL;
-  
+
   SDL_RWops *file = SDL_RWFromFile(path, "rb");
   if (!file)
     goto rwops_failure;
@@ -740,10 +733,8 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
   const int surface_scale = rs->scale;
   double pen_x = x * surface_scale;
   y *= surface_scale;
-  int bytes_per_pixel = surface->format->BytesPerPixel;
   const char* end = text + len;
-  uint8_t* destination_pixels = surface->pixels;
-  int clip_end_x = clip.x + clip.w, clip_end_y = clip.y + clip.h;
+  int clip_end_x = clip.x + clip.w;
 
   RenFont* last = NULL;
   double last_pen_x = x;
@@ -751,7 +742,7 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
   bool strikethrough = fonts[0]->style & FONT_STYLE_STRIKETHROUGH;
 
   while (text < end) {
-    unsigned int codepoint, r, g, b;
+    unsigned int codepoint;
     text = utf8_to_codepoint(text, &codepoint);
     GlyphSet* set = NULL; GlyphMetric* metric = NULL;
     RenFont* font = font_group_get_glyph(&set, &metric, fonts, codepoint, false,
@@ -760,51 +751,21 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
       break;
     int start_x = floor(pen_x) + metric->bitmap_left;
     int end_x = (metric->x1 - metric->x0) + start_x;
-    int glyph_end = metric->x1, glyph_start = metric->x0;
     if (!metric->loaded && codepoint > 0xFF)
       ren_draw_rect(rs, (RenRect){ start_x + 1, y, font->space_advance - 1, ren_font_group_get_height(fonts) }, color);
     if (set->surface && color.a > 0 && end_x >= clip.x && start_x < clip_end_x) {
-      uint8_t* source_pixels = set->surface->pixels;
-      for (int line = metric->y0; line < metric->y1; ++line) {
-        int target_y = line + y - metric->bitmap_top + fonts[0]->baseline * surface_scale;
-        if (target_y < clip.y)
-          continue;
-        if (target_y >= clip_end_y)
-          break;
-        if (start_x + (glyph_end - glyph_start) >= clip_end_x)
-          glyph_end = glyph_start + (clip_end_x - start_x);
-        if (start_x < clip.x) {
-          int offset = clip.x - start_x;
-          start_x += offset;
-          glyph_start += offset;
-        }
-        uint32_t* destination_pixel = (uint32_t*)&(destination_pixels[surface->pitch * target_y + start_x * bytes_per_pixel]);
-        uint8_t* source_pixel = &source_pixels[line * set->surface->pitch + glyph_start * (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL ? 3 : 1)];
-        for (int x = glyph_start; x < glyph_end; ++x) {
-          uint32_t destination_color = *destination_pixel;
-          // the standard way of doing this would be SDL_GetRGBA, but that introduces a performance regression. needs to be investigated
-          SDL_Color dst = { (destination_color & surface->format->Rmask) >> surface->format->Rshift, (destination_color & surface->format->Gmask) >> surface->format->Gshift, (destination_color & surface->format->Bmask) >> surface->format->Bshift, (destination_color & surface->format->Amask) >> surface->format->Ashift };
-          SDL_Color src;
+      const bool subpx = font->antialiasing == FONT_ANTIALIASING_SUBPIXEL;
 
-          if (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
-            src.r = *(source_pixel++);
-            src.g = *(source_pixel++);
-          }
-          else  {
-            src.r = *(source_pixel);
-            src.g = *(source_pixel);
-          }
+      const uint8_t *src =
+          (const uint8_t *)set->surface->pixels +
+          metric->y0 * set->surface->pitch +
+          metric->x0 * (subpx ? 3 : 1);
 
-          src.b = *(source_pixel++);
-          src.a = 0xFF;
+      blit_glyph(rs->surface, src, set->surface->pitch,
+                metric->x1 - metric->x0, metric->y1 - metric->y0,
+                start_x, y - metric->bitmap_top + fonts[0]->baseline*surface_scale + metric->y0,
+                &clip, color, subpx);
 
-          r = (color.r * src.r * color.a + dst.r * (65025 - src.r * color.a) + 32767) / 65025;
-          g = (color.g * src.g * color.a + dst.g * (65025 - src.g * color.a) + 32767) / 65025;
-          b = (color.b * src.b * color.a + dst.b * (65025 - src.b * color.a) + 32767) / 65025;
-          // the standard way of doing this would be SDL_GetRGBA, but that introduces a performance regression. needs to be investigated
-          *destination_pixel++ = dst.a << surface->format->Ashift | r << surface->format->Rshift | g << surface->format->Gshift | b << surface->format->Bshift;
-        }
-      }
     }
 
     float adv = metric->xadvance ? metric->xadvance : font->space_advance;
