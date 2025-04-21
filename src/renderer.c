@@ -53,6 +53,75 @@ static RenRect scaled_rect(const RenRect rect, const int scale) {
 }
 
 /* ------------------------------------------------------------------------
+ * blit_glyph: unico punto dove avviene il blending pixel‑per‑pixel dei
+ * bitmap dei glifi sul surface di destinazione.  È usato sia dal percorso
+ * “fast‑path” ASCII sia da quello HarfBuzz, evitando duplicazione di ~150
+ * righe di codice.  Modifiche future al blending vanno fatte solo qui.
+ * --------------------------------------------------------------------- */
+static inline void blit_glyph(SDL_Surface *surface,
+                              const uint8_t *src_pixels,
+                              int src_pitch,
+                              int byte_width,
+                              int glyph_w,
+                              int glyph_h,
+                              int dst_x,
+                              int dst_y,
+                              const SDL_Rect *clip,
+                              RenColor color,
+                              bool is_subpixel)
+{
+  if (color.a == 0 || !surface || !src_pixels) return;
+
+  const int clip_end_x = clip->x + clip->w;
+  const int clip_end_y = clip->y + clip->h;
+
+  const int bpp = surface->format->BytesPerPixel;
+  uint8_t *dst_base = (uint8_t *) surface->pixels;
+
+  for (int row = 0; row < glyph_h; ++row) {
+    int y = dst_y + row;
+    if (y < clip->y || y >= clip_end_y) continue;
+
+    const uint8_t *src = src_pixels + row * src_pitch;
+    uint32_t *dst = (uint32_t *) &dst_base[surface->pitch * y + dst_x * bpp];
+
+    int x_col = dst_x;
+    for (int col = 0; col < glyph_w; ++col, ++x_col, ++dst) {
+      if (x_col < clip->x) { src += is_subpixel ? 3 : 1; continue; }
+      if (x_col >= clip_end_x) break;
+
+      uint8_t src_r, src_g, src_b;
+      if (is_subpixel) {
+        src_r = src[0]; src_g = src[1]; src_b = src[2];
+        src += 3;
+      } else {
+        src_r = src_g = src_b = *src;
+        ++src;
+      }
+      uint8_t src_a = src_r;
+      if (src_a == 0) continue;
+
+      uint32_t dst_pix = *dst;
+      SDL_Color d = {
+        (dst_pix & surface->format->Rmask) >> surface->format->Rshift,
+        (dst_pix & surface->format->Gmask) >> surface->format->Gshift,
+        (dst_pix & surface->format->Bmask) >> surface->format->Bshift,
+        (dst_pix & surface->format->Amask) >> surface->format->Ashift
+      };
+
+      uint32_t r = (color.r * src_r * color.a + d.r * (65025 - src_r * color.a) + 32767) / 65025;
+      uint32_t g = (color.g * src_g * color.a + d.g * (65025 - src_g * color.a) + 32767) / 65025;
+      uint32_t b = (color.b * src_b * color.a + d.b * (65025 - src_b * color.a) + 32767) / 65025;
+
+      *dst = d.a << surface->format->Ashift |
+             r   << surface->format->Rshift |
+             g   << surface->format->Gshift |
+             b   << surface->format->Bshift;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------------
  * Fast-path helpers: UTF-8 decoding, ligature detection and legacy
  * rendering routines (avoid HarfBuzz when not needed).
  * --------------------------------------------------------------------- */
