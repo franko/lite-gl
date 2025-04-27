@@ -542,6 +542,9 @@ function Node:draw_tab_borders(view, is_active, is_hovered, x, y, w, h, standalo
 end
 
 function Node:draw_tab(view, is_active, is_hovered, is_close_hovered, x, y, w, h, standalone)
+  -- reset any clip rectangle left from the previous tab so borders / buttons
+  -- are not discarded by an outdated clip region
+  renderer.clear_clip_rect()
   x, y, w, h = self:draw_tab_borders(view, is_active, is_hovered, x, y, w, h, standalone)
   -- Close button
   local cx, cw, cpad = close_button_location(x, w)
