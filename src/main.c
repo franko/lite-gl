@@ -143,33 +143,19 @@ int main(int argc, char **argv) {
   SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
   atexit(SDL_Quit);
 
-#ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR /* Available since 2.0.8 */
   SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
-#endif
-#if SDL_VERSION_ATLEAST(2, 0, 5)
   SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-#endif
-#if SDL_VERSION_ATLEAST(2, 0, 18)
   SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
-#endif
-#if SDL_VERSION_ATLEAST(2, 0, 22)
   SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
-#endif
 
-#if SDL_VERSION_ATLEAST(2, 0, 8)
   /* This hint tells SDL to respect borderless window as a normal window.
   ** For example, the window will sit right on top of the taskbar instead
   ** of obscuring it. */
   SDL_SetHint("SDL_BORDERLESS_WINDOWED_STYLE", "1");
-#endif
-#if SDL_VERSION_ATLEAST(2, 0, 12)
   /* This hint tells SDL to allow the user to resize a borderless windoow.
   ** It also enables aero-snap on Windows apparently. */
   SDL_SetHint("SDL_BORDERLESS_RESIZABLE_STYLE", "1");
-#endif
-#if SDL_VERSION_ATLEAST(2, 0, 9)
   SDL_SetHint("SDL_MOUSE_DOUBLE_CLICK_RADIUS", "4");
-#endif
 
   SDL_DisplayMode dm;
   SDL_GetCurrentDisplayMode(0, &dm);
@@ -276,10 +262,6 @@ init_lua:
   // This allows the window to be destroyed before lite-gl is done with
   // reaping child processes
   ren_free_window_resources(&window_renderer);
-  // if (rencache) {
-  //   rencache_destroy(rencache);
-  //   rencache = NULL;
-  // }
   lua_close(L);
 
   return EXIT_SUCCESS;
