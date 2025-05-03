@@ -47,6 +47,10 @@ bit32 = bit32 or require "core.bit"
 
 require "core.utf8string"
 
+-- Register bundled fonts directory with Fontconfig before any font is loaded
+local renderer = require "renderer"
+renderer.add_font_dir(DATADIR .. PATHSEP .. "fonts")
+
 -- Because AppImages change the working directory before running the executable,
 -- we need to change it back to the original one.
 -- https://github.com/AppImage/AppImageKit/issues/172

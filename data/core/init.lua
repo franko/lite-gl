@@ -500,12 +500,16 @@ local style = require "core.style"
 ------------------------------- Fonts ----------------------------------------
 
 -- customize fonts:
--- style.font = renderer.font.load(DATADIR .. "/fonts/FiraSans-Regular.ttf", 14 * SCALE)
--- style.code_font = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Regular.ttf", 14 * SCALE)
+-- Choose a system's font you prefer or use "FiraSans" or "JetBrains Mono" provided
+-- with the application.
+-- For example on Ubuntu you may use:
 --
--- DATADIR is the location of the installed Lite XL Lua code, default color
--- schemes and fonts.
--- USERDIR is the location of the Lite XL configuration directory.
+-- style.font = renderer.font.load("Ubuntu", 15 * SCALE)
+-- style.code_font = renderer.font.load("Ubuntu Mono", 17 * SCALE)
+--
+-- It is possible to load fonts in "bold" or "italic" style using the syntax:
+-- style.code_font = renderer.font.load("Ubuntu Mono:bold", 17 * SCALE)
+-- style.code_font = renderer.font.load("Ubuntu Mono:italic", 17 * SCALE)
 --
 -- font names used by lite:
 -- style.font          : user interface
