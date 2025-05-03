@@ -9,6 +9,7 @@ lite_sources = [
     'renderer.c',
     'renwindow.c',
     'rencache.c',
+    'font_fc.c',
     'main.c',
 ]
 

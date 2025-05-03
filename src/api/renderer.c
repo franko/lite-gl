@@ -1,9 +1,11 @@
 #include <string.h>
+#include <stdlib.h>
 #include "api.h"
 #include "../renderer.h"
 #include "../rensurface.h"
 #include "../renwindow.h"
 #include "lua.h"
+#include "font_fc.h"
 
 // a reference index to a table that stores the fonts
 static int RENDERER_FONT_REF = LUA_NOREF;
@@ -91,7 +93,7 @@ static int font_get_options(
 }
 
 static int f_font_load(lua_State *L) {
-  const char *filename  = luaL_checkstring(L, 1);
+  const char *spec = luaL_checkstring(L, 1);
   float size = luaL_checknumber(L, 2);
   int style = 0;
   ERenFontHinting hinting = FONT_HINTING_SLIGHT;
@@ -101,10 +103,21 @@ static int f_font_load(lua_State *L) {
   if (ret_code > 0)
     return ret_code;
 
+  /* Resolve through Fontconfig if the spec is not a path */
+  int want_bold   = (style & FONT_STYLE_BOLD)   ? 1 : 0;
+  int want_italic = (style & FONT_STYLE_ITALIC) ? 1 : 0;
+  char *path  = fc_resolve_font(spec, want_bold, want_italic);
+  if (!path) {
+    return luaL_error(L, "Fontconfig: could not match \"%s\"", spec);
+  }
+
   RenFont** font = lua_newuserdata(L, sizeof(RenFont*));
-  *font = ren_font_load(&window_renderer, filename, size, antialiasing, hinting, style);
+  *font = ren_font_load(&window_renderer, path, size, antialiasing, hinting, style);
+
+  free(path);
+
   if (!*font)
-    return luaL_error(L, "failed to load font");
+    return luaL_error(L, "failed to load font \"%s\"", spec);
   luaL_setmetatable(L, API_TYPE_FONT);
   return 1;
 }
@@ -442,7 +455,14 @@ static int f_set_render_clip_rect(lua_State *L) {
 }
 
 
+static int f_add_app_font_dir(lua_State *L) {
+  const char *dir = luaL_checkstring(L, 1);
+  fc_set_app_fonts_dir(dir);
+  return 0;
+}
+
 static const luaL_Reg lib[] = {
+  { "add_font_dir",         f_add_app_font_dir     },
   { "show_debug",           f_show_debug           },
   { "get_size",             f_get_size             },
   { "begin_frame",          f_begin_frame          },

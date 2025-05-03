@@ -22,12 +22,14 @@ style.tab_width = common.round(170 * SCALE)
 --
 -- On High DPI monitor or non RGB monitor you may consider using antialiasing grayscale instead.
 -- The antialiasing grayscale with full hinting is interesting for crisp font rendering.
-style.font = renderer.font.load(DATADIR .. "/fonts/FiraSans-Regular.ttf", 15 * SCALE)
+local code_font, code_size = "JetBrains Mono", 15
+local ui_font, ui_size = "FiraSans", 15
+style.font = renderer.font.load(ui_font, ui_size * SCALE)
 style.big_font = style.font:copy(46 * SCALE)
-style.icon_font = renderer.font.load(DATADIR .. "/fonts/icons.ttf", 16 * SCALE, {antialiasing="grayscale", hinting="full"})
+style.icon_font = renderer.font.load("icons", 16 * SCALE, {antialiasing="grayscale", hinting="full"})
 style.icon_big_font = style.icon_font:copy(23 * SCALE)
-style.code_font = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Regular.ttf", 15 * SCALE)
-style.code_font_bold = renderer.font.load(DATADIR .. "/fonts/JetBrainsMono-Bold.ttf", 15 * SCALE)
+style.code_font = renderer.font.load(code_font, code_size * SCALE)
+style.code_font_bold = renderer.font.load(code_font .. ":bold", code_size * SCALE)
 
 style.syntax = {}
 
@@ -36,7 +38,7 @@ style.syntax = {}
 -- override style.code_font on a per-token basis, so you can choose to eg.
 -- render comments in an italic font if you want to.
 style.syntax_fonts = {}
--- style.syntax_fonts["comment"] = renderer.font.load(path_to_font, size_of_font, rendering_options)
+-- style.syntax_fonts["comment"] = renderer.font.load(code_font .. ":italic", code_size * SCALE)
 
 style.log = {}
 

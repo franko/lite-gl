@@ -87,8 +87,9 @@ pcre2_dep = dependency('libpcre2-8')
 freetype_dep = dependency('freetype2')
 sdl_dep = dependency('sdl2')
 harfbuzz_dep = dependency('harfbuzz')
+fontconfig_dep = dependency('fontconfig')
 
-lite_deps = [lua_dep, sdl_dep, freetype_dep, pcre2_dep, harfbuzz_dep, libm, libdl]
+lite_deps = [lua_dep, sdl_dep, freetype_dep, pcre2_dep, harfbuzz_dep, fontconfig_dep, libm, libdl]
 
 if get_option('portable') or host_machine.system() == 'windows'
     lite_bindir = '/'
