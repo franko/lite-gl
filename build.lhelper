@@ -27,4 +27,4 @@ else
     packages=(pcre2 freetype2 "sdl2 -threads -opengl -render -loadso" "lua")
 fi
 
-packages+=(harfbuzz fontconfig)
+packages+=(harfbuzz expat "fontconfig -private-config")

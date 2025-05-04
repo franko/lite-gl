@@ -1,3 +1,5 @@
+#import <string.h>
+
 #import <Foundation/Foundation.h>
 #include <lua.h>
 
@@ -8,6 +10,13 @@ void set_macos_bundle_resources(lua_State *L)
     NSString* resource_path = [[NSBundle mainBundle] resourcePath];
     lua_pushstring(L, [resource_path UTF8String]);
     lua_setglobal(L, "MACOS_RESOURCES");
+}}
+
+char *get_macos_resources()
+{ @autoreleasepool
+{
+    NSString* resource_path = [[NSBundle mainBundle] resourcePath];
+    return strdup([resource_path UTF8String]);
 }}
 #endif
 
