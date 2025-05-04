@@ -54,6 +54,7 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 rundir=".run"
+mkdir -p "$rundir"
 if [ "$option_portable" == on ]; then
   bindir="$rundir"
   datadir="$rundir/data"
@@ -80,7 +81,7 @@ copy_lite_build () {
     cp "$builddir/src/lite-gl" "$bindir"
   fi
   mkdir -p "$datadir/core"
-  for module_name in core plugins colors fonts; do
+  for module_name in core plugins colors fonts fontconfig; do
     cp -r "data/$module_name" "$datadir"
   done
   cp "$builddir/src/"*"$shared_library_ext" "$datadir/plugins/terminal"
