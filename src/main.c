@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <SDL.h>
+#include <limits.h>
 #include "api/api.h"
 #include "renderer.h"
 #include "rensurface.h"
 #include "renwindow.h"
+#include "font_fc.h"
 
 #include <signal.h>
 
@@ -17,6 +19,42 @@
 #elif defined(__FreeBSD__)
   #include <sys/sysctl.h>
 #endif
+
+#ifdef _WIN32
+#define LITE_PATHSEP_CHAR '\\'
+#define LITE_PATHSEP_STR  "\\"
+#else
+#define LITE_PATHSEP_CHAR '/'
+#define LITE_PATHSEP_STR  "/"
+#endif
+
+static void setup_fontconfig(const char *exe_file)
+{
+  char datadir[PATH_MAX];
+  const char *mac_res = getenv("MACOS_RESOURCES");
+  if (mac_res && *mac_res) {
+    strncpy(datadir, mac_res, sizeof(datadir) - 1);
+    datadir[sizeof(datadir) - 1] = '\0';
+  } else {
+    /* obtain EXEDIR */
+    strncpy(datadir, exe_file, sizeof(datadir) - 1);
+    datadir[sizeof(datadir) - 1] = '\0';
+    char *sep = strrchr(datadir, LITE_PATHSEP_CHAR);
+    if (sep) *sep = '\0';
+
+    char *last = strrchr(datadir, LITE_PATHSEP_CHAR);
+    if (last && strcmp(last + 1, "bin") == 0) {
+      *last = '\0';
+      strncat(datadir, LITE_PATHSEP_STR "share" LITE_PATHSEP_STR "lite-gl",
+              sizeof(datadir) - strlen(datadir) - 1);
+    } else {
+      strncat(datadir, LITE_PATHSEP_STR "data",
+              sizeof(datadir) - strlen(datadir) - 1);
+    }
+  }
+
+  lite_fc_load_custom_config(datadir);
+}
 
 
 static SDL_Window *window;
@@ -168,6 +206,10 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Error creating lite-gl window: %s", SDL_GetError());
     exit(1);
   }
+
+  char exename_fc[2048];
+  get_exe_filename(exename_fc, sizeof(exename_fc));
+  setup_fontconfig(exename_fc);
   ren_init(window);
 
   lua_State *L;
