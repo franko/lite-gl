@@ -84,3 +84,40 @@ char *fc_resolve_font(const char *pattern,
   FcPatternDestroy(match);
   return out; /* caller frees */
 }
+#include <limits.h>
+
+#ifdef _WIN32
+  #define FC_PATHSEP "\\"
+#else
+  #define FC_PATHSEP "/"
+#endif
+
+bool lite_fc_load_custom_config(const char *datadir_utf8)
+{
+  if (!datadir_utf8) return false;
+
+  char cfg_path[PATH_MAX];
+  snprintf(cfg_path, sizeof(cfg_path), "%s%sfontconfig%sfonts.conf",
+           datadir_utf8, FC_PATHSEP, FC_PATHSEP);
+
+  /* Ensure Fontconfig is initialised */
+  FcInit();
+
+  FcConfig *cfg = FcConfigCreate();
+  if (!cfg)
+    return false;
+
+  /* Load bundled configuration */
+  if (!FcConfigParseAndLoad(cfg, (const FcChar8*)cfg_path, FcTrue)) {
+    FcConfigDestroy(cfg);
+    return false;
+  }
+
+  /* Add bundled fonts directory (safe if already present in XML) */
+  char fonts_dir[PATH_MAX];
+  snprintf(fonts_dir, sizeof(fonts_dir), "%s%sfonts", datadir_utf8, FC_PATHSEP);
+  FcConfigAppFontAddDir(cfg, (const FcChar8*)fonts_dir);
+
+  FcConfigSetCurrent(cfg);
+  return true;
+}
