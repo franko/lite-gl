@@ -92,7 +92,8 @@ char *fc_resolve_font(const char *pattern,
   #define FC_PATHSEP "/"
 #endif
 
-bool lite_fc_load_custom_config(const char *datadir_utf8)
+#if defined(_WIN32) || defined(__APPLE__)
+bool fc_load_custom_config(const char *datadir_utf8)
 {
   if (!datadir_utf8) return false;
 
@@ -121,3 +122,4 @@ bool lite_fc_load_custom_config(const char *datadir_utf8)
   FcConfigSetCurrent(cfg);
   return true;
 }
+#endif

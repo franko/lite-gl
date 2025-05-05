@@ -28,6 +28,7 @@
 #define LITE_PATHSEP_STR  "/"
 #endif
 
+#if defined(_WIN32) || defined(__APPLE__)
 static void setup_fontconfig(const char *exe_file)
 {
   char datadir[PATH_MAX];
@@ -53,8 +54,9 @@ static void setup_fontconfig(const char *exe_file)
     }
   }
 
-  lite_fc_load_custom_config(datadir);
+  fc_load_custom_config(datadir);
 }
+#endif
 
 
 static SDL_Window *window;
@@ -209,7 +211,9 @@ int main(int argc, char **argv) {
 
   char exename_fc[2048];
   get_exe_filename(exename_fc, sizeof(exename_fc));
+#if defined(_WIN32) || defined(__APPLE__)
   setup_fontconfig(exename_fc);
+#endif
   ren_init(window);
 
   lua_State *L;
