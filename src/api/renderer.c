@@ -454,15 +454,7 @@ static int f_set_render_clip_rect(lua_State *L) {
   return 0;
 }
 
-
-static int f_add_app_font_dir(lua_State *L) {
-  const char *dir = luaL_checkstring(L, 1);
-  fc_set_app_fonts_dir(dir);
-  return 0;
-}
-
 static const luaL_Reg lib[] = {
-  { "add_font_dir",         f_add_app_font_dir     },
   { "show_debug",           f_show_debug           },
   { "get_size",             f_get_size             },
   { "begin_frame",          f_begin_frame          },

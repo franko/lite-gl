@@ -28,14 +28,18 @@
 #define LITE_PATHSEP_STR  "/"
 #endif
 
-#if defined(_WIN32) || defined(__APPLE__)
 static void setup_fontconfig(const char *exe_file)
 {
   char datadir[PATH_MAX];
-  const char *mac_res = getenv("MACOS_RESOURCES");
+#ifdef __APPLE__
+  char *mac_res = get_macos_resources();
+#else
+  char *mac_res = NULL;
+#endif
   if (mac_res && *mac_res) {
     strncpy(datadir, mac_res, sizeof(datadir) - 1);
     datadir[sizeof(datadir) - 1] = '\0';
+    free(mac_res);
   } else {
     /* obtain EXEDIR */
     strncpy(datadir, exe_file, sizeof(datadir) - 1);
@@ -54,9 +58,16 @@ static void setup_fontconfig(const char *exe_file)
     }
   }
 
-  fc_load_custom_config(datadir);
-}
+#if defined(_WIN32) || defined(__APPLE__)
+  char cfg_path[PATH_MAX];
+  snprintf(cfg_path, sizeof(cfg_path), "%s%cfontconfig%cfonts.conf",
+           datadir, LITE_PATHSEP_CHAR, LITE_PATHSEP_CHAR);
+  fprintf(stderr, "DEBUG: writing FONTCONFIG_FILE env var to %s\n", cfg_path); fflush(stderr);
+  _putenv_s("FONTCONFIG_FILE", cfg_path);
 #endif
+
+  fc_load_custom_config(datadir, cfg_path);
+}
 
 
 static SDL_Window *window;
@@ -138,6 +149,7 @@ static void init_window_icon(void) {
 void enable_momentum_scroll();
 #ifdef MACOS_USE_BUNDLE
 void set_macos_bundle_resources(lua_State *L);
+char *get_macos_resources();
 #endif
 #endif
 
@@ -209,11 +221,11 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  char exename_fc[2048];
-  get_exe_filename(exename_fc, sizeof(exename_fc));
-#if defined(_WIN32) || defined(__APPLE__)
-  setup_fontconfig(exename_fc);
-#endif
+  char exename[PATH_MAX];
+  get_exe_filename(exename, sizeof(exename));
+  if (exename[0]) {
+    setup_fontconfig(exename);
+  }
   ren_init(window);
 
   lua_State *L;
@@ -239,8 +251,6 @@ init_lua:
   lua_pushnumber(L, get_scale());
   lua_setglobal(L, "SCALE");
 
-  char exename[2048];
-  get_exe_filename(exename, sizeof(exename));
   if (*exename) {
     lua_pushstring(L, exename);
   } else {
