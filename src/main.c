@@ -31,7 +31,7 @@
 static void setup_fontconfig(const char *exe_file)
 {
   char datadir[PATH_MAX];
-#ifdef __APPLE__
+#ifdef MACOS_USE_BUNDLE
   char *mac_res = get_macos_resources();
 #else
   char *mac_res = NULL;
@@ -63,7 +63,11 @@ static void setup_fontconfig(const char *exe_file)
   snprintf(cfg_path, sizeof(cfg_path), "%s%cfontconfig%cfonts.conf",
            datadir, LITE_PATHSEP_CHAR, LITE_PATHSEP_CHAR);
   fprintf(stderr, "DEBUG: writing FONTCONFIG_FILE env var to %s\n", cfg_path); fflush(stderr);
+#ifdef _WIN32
   _putenv_s("FONTCONFIG_FILE", cfg_path);
+#else
+  setenv("FONTCONFIG_FILE", cfg_path, 1);
+#endif
 #endif
 
   fc_load_custom_config(datadir, cfg_path);
