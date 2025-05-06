@@ -47,32 +47,33 @@ char *fc_resolve_font(const char *pattern,
   #define FC_PATHSEP "/"
 #endif
 
-bool fc_load_custom_config(const char *datadir_utf8, const char *cfg_path)
-{
-  FcInit();
-
-  if (!datadir_utf8) return false;
-
-  FcConfig *cfg = FcConfigCreate();
-  if (!cfg)
+bool fc_load_custom_config(const char *datadir_utf8, const char *cfg_path) {
+  if (!datadir_utf8 || !FcInit())
     return false;
 
-  if (cfg_path) {
-    fprintf(stderr, "DEBUG: explicit load of fontconfig config %s\n", cfg_path); fflush(stderr);
-    /* Load bundled configuration */
-    if (!FcConfigParseAndLoad(cfg, (const FcChar8*)cfg_path, FcTrue)) {
+  FcConfig *cfg = NULL;
+
+  if (cfg_path && *cfg_path) {       /* ----- explicit bundled XML ----- */
+    cfg = FcConfigCreate();
+    if (!cfg)
+      return false;
+    if (!FcConfigParseAndLoad(cfg, (const FcChar8 *)cfg_path, FcTrue)) {
       FcConfigDestroy(cfg);
       return false;
     }
+  } else {                           /* ----- use the system cfg ----- */
+    cfg = FcConfigGetCurrent();
+    if (!cfg)
+      return false;
   }
 
-  /* Add bundled fonts directory (safe if already present in XML) */
   char fonts_dir[PATH_MAX];
   snprintf(fonts_dir, sizeof(fonts_dir), "%s%sfonts", datadir_utf8, FC_PATHSEP);
-  fprintf(stderr, "DEBUG: adding application fonts directory %s to fontconfig\n", fonts_dir); fflush(stderr);
-  FcConfigAppFontAddDir(cfg, (const FcChar8*)fonts_dir);
+  FcConfigAppFontAddDir(cfg, (const FcChar8 *)fonts_dir);
+
+  /* 3. Ensure the font database is up-to-date. */
+  FcConfigBuildFonts(cfg);
 
   FcConfigSetCurrent(cfg);
   return true;
 }
-
