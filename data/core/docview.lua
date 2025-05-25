@@ -623,11 +623,16 @@ function DocView:render_tile(i, j)
       if text:sub(-1) == "\n" then
         text = text:sub(1, -2)
       end
-      local font = syntax_fonts[ttype] or default_font
-      renderer.draw_text(font, text, tx, ty, syntax_colors[ttype])
-      tx = tx + font:get_width(text)
+      local font  = syntax_fonts[ttype] or default_font
+      local width = font:get_width(text)
 
-      -- Early-out if we have passed the right edge of the tile.
+      -- Skip tokens completely left of the tile.
+      if tx + width >= x then
+        renderer.draw_text(font, text, tx, ty, syntax_colors[ttype])
+      end
+      tx = tx + width
+
+      -- Early-out once we pass the right edge of the tile.
       if tx > x + w then break end
     end
   end
