@@ -618,15 +618,9 @@ function DocView:render_tile(i, j)
     local tx = metric.x          -- text starts at document body origin
     local ty = y + (line - first_line) * lh + text_y_offset
 
-    -- Detect trailing newline to avoid drawing it (#1164 behaviour).
-    local line_tokens = self.doc.highlighter:get_line(line).tokens
-    local last_token
-    if string.sub(line_tokens[#line_tokens], -1) == "\n" then
-      last_token = #line_tokens - 1
-    end
 
     for tidx, ttype, text in self.doc.highlighter:each_token(line) do
-      if tidx == last_token then
+      if text:sub(-1) == "\n" then
         text = text:sub(1, -2)
       end
       local font = syntax_fonts[ttype] or default_font
