@@ -14,7 +14,7 @@ local TILE_CHARACTERS, TILE_LINES = 160, 80
 local DocView = TiledView:extend()
 
 DocView.context = "session"
-
+DocView.tile_retention = 10
 
 local function move_to_line_offset(dv, line, col, offset)
   local xo = dv.last_x_offset
@@ -70,16 +70,7 @@ end
 -- Retain tiles within a configurable radius (Chebyshev distance)
 -- around the area drawn in the current frame.
 function DocView:clear_unused_tiles()
-  local R = config.tile_retention or 0
-  -- quick exit for legacy behaviour
-  if R == 0 then
-    for id in pairs(self.named_surfaces) do
-      if id:match("^[:>]") and not self.used_tiles_ids[id] then
-        self.named_surfaces[id] = nil
-      end
-    end
-    return
-  end
+  local R = Docview.tile_retention
 
   local bb = self.used_tiles_bbox
   for id in pairs(self.named_surfaces) do
