@@ -639,6 +639,36 @@ function DocView:render_tile(i, j)
 end
 
 
+---Render a gutter tile identified by its row index.
+---This mirrors `DocView:render_tile` but restricts drawing to the
+---gutter area (line numbers and related decorations).
+---@param j integer  -- vertical tile index (row)
+function DocView:render_gutter_tile(j)
+  local metric   = self.tiles_metric
+  local x        = self.position.x
+  local y        = metric.y + j * metric.h
+  local w        = metric.gutter_width
+  local h        = metric.h
+  local tile_id  = gutter_tile_id(j)
+
+  -- Make sure the surface exists and clear it when needed.
+  local needs_redraw = self:prepare_tile(tile_id, x, y, w, h, style.background, false)
+  if not needs_redraw then
+    return
+  end
+
+  local first_line = j * TILE_LINES + 1
+  local last_line  = math.min((j + 1) * TILE_LINES, #self.doc.lines)
+  local gpad       = metric.gutter_padding
+  local ty         = y
+
+  for line = first_line, last_line do
+    ty = ty + self:draw_line_gutter(line, x, ty,
+      gpad and w - gpad or w, style.line_number)
+  end
+end
+
+
 function DocView:draw_line_gutter(line, x, y, width, color)
   local font = self:get_font()
   x, y = x + style.padding.x, y + self:get_line_text_y_offset()
