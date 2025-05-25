@@ -735,8 +735,10 @@ function DocView:render_tile(i, j)
   local lh             = metric.line_height
   local text_y_offset  = self:get_line_text_y_offset()
 
-  local first_line = j * TILE_LINES + 1
+  -- clamp to document line range; negative j means tiles above top
+  local first_line = math.max(1, j * TILE_LINES + 1)
   local last_line  = math.min((j + 1) * TILE_LINES, #self.doc.lines)
+  if first_line > last_line then return end
 
   for line = first_line, last_line do
     local tx = metric.x          -- text starts at document body origin
@@ -781,8 +783,9 @@ function DocView:render_gutter_tile(j)
     return
   end
 
-  local first_line = j * TILE_LINES + 1
+  local first_line = math.max(1, j * TILE_LINES + 1)
   local last_line  = math.min((j + 1) * TILE_LINES, #self.doc.lines)
+  if first_line > last_line then return end
   local gpad       = metric.gutter_padding
   local ty         = y
 
