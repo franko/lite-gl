@@ -582,36 +582,63 @@ function DocView:draw_text_gutter(font, text, x, y, color)
 end
 
 ---Render a single document tile identified by its column/row indexes.
----It guarantees the surface exists and, if newly created or invalidated,
+---It guarantees the surface exists and, if newly created or resized,
 ---redraws the entire content of that tile.  It does **not** present the
 ---surface; callers are expected to do that later (e.g. via present_surfaces).
 ---@param i integer  -- horizontal tile index
 ---@param j integer  -- vertical   tile index
 function DocView:render_tile(i, j)
-  -- Tile pixel position and size.
+  -- Compute tile rectangle in screen coordinates.
   local metric = self.tiles_metric
-  local x = metric.x + i * metric.w
-  local y = metric.y + j * metric.h
-  local w, h = metric.w, metric.h
+  local x      = metric.x + i * metric.w
+  local y      = metric.y + j * metric.h
+  local w, h   = metric.w, metric.h
+  local tile_id = ":" .. i .. " " .. j   -- matches compose_tile_id
 
-  -- Body-tile identifier (matches TiledView's compose_tile_id logic).
-  local tile_id = ":" .. i .. " " .. j
-
-  -- Ensure the surface exists and begin a new frame if it needs redrawing.
+  -- Retrieve / create surface and clear it.
   local needs_redraw = self:prepare_tile(tile_id, x, y, w, h, style.background, false)
-  if not needs_redraw then
-    return -- Already up-to-date.
-  end
+  if not needs_redraw then return end   -- nothing to do
 
-  -- Draw every document line that falls inside this tile.
-  local lh = metric.line_height
-  local minline = j * TILE_LINES + 1
-  local maxline = math.min((j + 1) * TILE_LINES, #self.doc.lines)
+  ---------------------------------------------------------------------------
+  -- Inline draw_line_text and draw_text for maximum efficiency.
+  ---------------------------------------------------------------------------
+  local default_font = self:get_font()
+  local _, indent_size = self.doc:get_indent_info()
+  default_font:set_tab_size(indent_size)
 
-  local tx = metric.x
-  local ty = y
-  for line = minline, maxline do
-    ty = ty + (self:draw_line_text(line, tx, ty) or lh)
+  local syntax_fonts   = style.syntax_fonts
+  local syntax_colors  = style.syntax
+  local lh             = metric.line_height
+  local text_y_offset  = self:get_line_text_y_offset()
+
+  local first_line = j * TILE_LINES + 1
+  local last_line  = math.min((j + 1) * TILE_LINES, #self.doc.lines)
+
+  for line = first_line, last_line do
+    local tx = metric.x          -- text starts at document body origin
+    local ty = y + (line - first_line) * lh + text_y_offset
+
+    -- Detect trailing newline to avoid drawing it (#1164 behaviour).
+    local line_tokens = self.doc.highlighter:get_line(line).tokens
+    local last_token
+    if string.sub(line_tokens[#line_tokens], -1) == "\n" then
+      last_token = #line_tokens - 1
+    end
+
+    for tidx, ttype, text in self.doc.highlighter:each_token(line) do
+      if tidx == last_token then
+        text = text:sub(1, -2)
+      end
+      local font = syntax_fonts[ttype] or default_font
+      if font ~= default_font then
+        font:set_tab_size(indent_size)
+      end
+      renderer.draw_text(font, text, tx, ty, syntax_colors[ttype])
+      tx = tx + font:get_width(text)
+
+      -- Early-out if we have passed the right edge of the tile.
+      if tx > x + w then break end
+    end
   end
 end
 
