@@ -53,6 +53,8 @@ end
 -- tiles touched during the current draw pass.
 function DocView:prepare_tile(tile_id, x, y, w, h, background, present_only)
   local needs = DocView.super.prepare_tile(self, tile_id, x, y, w, h, background, present_only)
+  -- tile now visible → cancel any pending background job
+  self.prerender_pending[tile_id] = nil
   local i, j  = parse_tile_id(tile_id)
   if j then
     local bb = self.used_tiles_bbox
@@ -70,7 +72,8 @@ end
 -- Retain tiles within a configurable radius (Chebyshev distance)
 -- around the area drawn in the current frame.
 function DocView:clear_unused_tiles()
-  local R = Docview.tile_retention
+  -- radius used to retain tiles around visible area
+  local R = DocView.tile_retention
 
   local bb = self.used_tiles_bbox
   for id in pairs(self.named_surfaces) do
@@ -95,12 +98,64 @@ function DocView:clear_unused_tiles()
       end
       if not keep then
         self.named_surfaces[id] = nil
+        self.prerender_pending[id] = nil
       end
     elseif id:match("^>") and not self.used_tiles_ids[id] then
       -- always free overlay / highlight surfaces
       self.named_surfaces[id] = nil
+      self.prerender_pending[id] = nil
     end
   end
+end
+
+
+----------------------------------------------------------------
+-- Background tile pre-rendering support
+----------------------------------------------------------------
+
+---Enqueue surrounding tiles to be rendered in background.
+function DocView:enqueue_background_tiles()
+  local bb = self.used_tiles_bbox
+  if bb.imin == math.huge then return end -- nothing drawn yet
+  local R = DocView.tile_retention
+
+  local function enqueue(id)
+    if not self.prerender_pending[id]
+       and not self.named_surfaces[id]
+       and not self.used_tiles_ids[id] then
+      self.prerender_pending[id] = true
+      table.insert(self.prerender_queue, id)
+    end
+  end
+
+  for j = bb.jmin - R, bb.jmax + R do
+    enqueue(gutter_tile_id(j))
+    for i = bb.imin - R, bb.imax + R do
+      enqueue(":" .. i .. " " .. j)
+    end
+  end
+end
+
+
+---Start the background prerender coroutine (once per view).
+function DocView:start_prerender_thread()
+  if self.prerender_thread_key then return end
+  local weak_self = setmetatable({ v = self }, { __mode = "v" })
+  self.prerender_thread_key = core.add_thread(function()
+    while true do
+      local dv = weak_self.v
+      if not dv then return end -- view no longer exists
+      local id = table.remove(dv.prerender_queue, 1)
+      if not id then
+        coroutine.yield(0.25)   -- idle
+      else
+        local i, j = parse_tile_id(id)
+        if i then dv:render_tile(i, j) else dv:render_gutter_tile(j) end
+        dv.prerender_pending[id] = nil
+        coroutine.yield(0)      -- one tile per resume
+      end
+    end
+  end, weak_self)
 end
 
 
@@ -189,6 +244,10 @@ function DocView:new(doc)
     limits = { x1 = 0, y1 = 0, x2 = 0, y2 = 0 }
   }
   self.used_tiles_ids = { }
+  -- background pre-rendering state
+  self.prerender_queue        = {}  -- FIFO queue of tile-ids
+  self.prerender_pending      = {}  -- set of ids already queued
+  self.prerender_thread_key   = nil -- id returned by core.add_thread
   self.v_scrollbar:set_forced_status(config.force_scrollbar_status)
   self.h_scrollbar:set_forced_status(config.force_scrollbar_status)
 end
@@ -854,6 +913,11 @@ function DocView:draw()
   self:draw_scrollbar()
   self:present_surfaces()
   self:clear_unused_tiles()
+
+  -- schedule background rendering of nearby tiles
+  self:enqueue_background_tiles()
+  self:start_prerender_thread()
+
   self.need_redraw = false
 end
 
