@@ -766,16 +766,20 @@ function DocView:draw()
   local limits = self.tiles_metric.limits
   limits.x1, limits.y1, limits.x2, limits.y2 = x1, y1, x2, y2
 
-  if minline then
-    local _, y = self:get_line_screen_position(minline)
-    local x = pos.x
-    for i = minline, maxline do
-      y = y + self:draw_line_gutter(i, x, y, gpad and gw - gpad or gw, style.line_number)
-    end
+  -- Draw body and gutter tiles that actually need to be redrawn.
+  if min_draw_j then
+    local metric = self.tiles_metric
+    local xo, yo, tw, th = metric.x, metric.y, metric.w, metric.h
+    local min_i = math.floor((x1 - xo) / tw)
+    local max_i = math.floor((x2 - 1 - xo) / tw)
 
-    x, y = self:get_line_screen_position(minline)
-    for i = minline, maxline do
-      y = y + (self:draw_line_text(i, x, y) or lh)
+    for j = min_draw_j, max_draw_j do
+      -- body tiles
+      for i = min_i, max_i do
+        self:render_tile(i, j)
+      end
+      -- gutter tile for the same row
+      self:render_gutter_tile(j)
     end
   end
 
