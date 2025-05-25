@@ -630,9 +630,6 @@ function DocView:render_tile(i, j)
         text = text:sub(1, -2)
       end
       local font = syntax_fonts[ttype] or default_font
-      if font ~= default_font then
-        font:set_tab_size(indent_size)
-      end
       renderer.draw_text(font, text, tx, ty, syntax_colors[ttype])
       tx = tx + font:get_width(text)
 
