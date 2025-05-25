@@ -32,9 +32,81 @@ local function gutter_tile_id(tile_1)
 end
 
 
+-- Parse tile id produced by TiledView / DocView.
+-- Returns:
+--   i , j  for body tiles  (":<i> <j>")
+--   nil, j for gutter tiles (":<j>")
+--   nil    if the id does not encode tile coordinates
+local function parse_tile_id(id)
+  if type(id) ~= "string" or id:sub(1, 1) ~= ":" then return end
+  local rest = id:sub(2)
+  local i, j = rest:match("^(%-?%d+)%s+(%-?%d+)$")
+  if i then
+    return tonumber(i), tonumber(j)
+  end
+  local g = tonumber(rest)
+  if g then return nil, g end
+end
+
+
+-- Override prepare_tile so we can keep the bounding-box of
+-- tiles touched during the current draw pass.
+function DocView:prepare_tile(tile_id, x, y, w, h, background, present_only)
+  local needs = DocView.super.prepare_tile(self, tile_id, x, y, w, h, background, present_only)
+  local i, j  = parse_tile_id(tile_id)
+  if j then
+    local bb = self.used_tiles_bbox
+    if i then -- body tile
+      bb.imin = math.min(bb.imin, i)
+      bb.imax = math.max(bb.imax, i)
+    end
+    bb.jmin   = math.min(bb.jmin, j)
+    bb.jmax   = math.max(bb.jmax, j)
+  end
+  return needs
+end
+
+
+-- Retain tiles within a configurable radius (Chebyshev distance)
+-- around the area drawn in the current frame.
 function DocView:clear_unused_tiles()
+  local R = config.tile_retention or 0
+  -- quick exit for legacy behaviour
+  if R == 0 then
+    for id in pairs(self.named_surfaces) do
+      if id:match("^[:>]") and not self.used_tiles_ids[id] then
+        self.named_surfaces[id] = nil
+      end
+    end
+    return
+  end
+
+  local bb = self.used_tiles_bbox
   for id in pairs(self.named_surfaces) do
-    if string.match(id, "^[:>]") and not self.used_tiles_ids[id] then
+    -- skip already-used ids
+    if not self.used_tiles_ids[id] and id:match("^:") then
+      local i, j = parse_tile_id(id)
+      local keep = false
+      if j then
+        -- Compute Chebyshev distance to bounding box
+        local di = 0
+        if i then
+          if i < bb.imin     then di = bb.imin - i
+          elseif i > bb.imax then di = i - bb.imax
+          end
+        end
+        local dj = 0
+        if j < bb.jmin       then dj = bb.jmin - j
+        elseif j > bb.jmax   then dj = j - bb.jmax
+        end
+        local dist = math.max(di, dj)
+        keep = dist <= R
+      end
+      if not keep then
+        self.named_surfaces[id] = nil
+      end
+    elseif id:match("^>") and not self.used_tiles_ids[id] then
+      -- always free overlay / highlight surfaces
       self.named_surfaces[id] = nil
     end
   end
@@ -51,6 +123,8 @@ function DocView:setup_tiles_for_drawing()
   metric.x, metric.y = self:get_content_body_offset()
   metric.w, metric.h = cw * TILE_CHARACTERS, lh * TILE_LINES
   self.used_tiles_ids = { }
+  self.used_tiles_bbox = { imin = math.huge, imax = -math.huge,
+                           jmin = math.huge, jmax = -math.huge }
   self.drawing_tiles = true
 end
 
