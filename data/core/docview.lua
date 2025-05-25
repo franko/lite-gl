@@ -581,6 +581,40 @@ function DocView:draw_text_gutter(font, text, x, y, color)
   end
 end
 
+---Render a single document tile identified by its column/row indexes.
+---It guarantees the surface exists and, if newly created or invalidated,
+---redraws the entire content of that tile.  It does **not** present the
+---surface; callers are expected to do that later (e.g. via present_surfaces).
+---@param i integer  -- horizontal tile index
+---@param j integer  -- vertical   tile index
+function DocView:render_tile(i, j)
+  -- Tile pixel position and size.
+  local metric = self.tiles_metric
+  local x = metric.x + i * metric.w
+  local y = metric.y + j * metric.h
+  local w, h = metric.w, metric.h
+
+  -- Body-tile identifier (matches TiledView's compose_tile_id logic).
+  local tile_id = ":" .. i .. " " .. j
+
+  -- Ensure the surface exists and begin a new frame if it needs redrawing.
+  local needs_redraw = self:prepare_tile(tile_id, x, y, w, h, style.background, false)
+  if not needs_redraw then
+    return -- Already up-to-date.
+  end
+
+  -- Draw every document line that falls inside this tile.
+  local lh = metric.line_height
+  local minline = j * TILE_LINES + 1
+  local maxline = math.min((j + 1) * TILE_LINES, #self.doc.lines)
+
+  local tx = metric.x
+  local ty = y
+  for line = minline, maxline do
+    ty = ty + (self:draw_line_text(line, tx, ty) or lh)
+  end
+end
+
 
 function DocView:draw_line_gutter(line, x, y, width, color)
   local font = self:get_font()
