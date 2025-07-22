@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <limits.h>
 #include "api/api.h"
 #include "renderer.h"
@@ -79,7 +79,9 @@ static void setup_fontconfig(const char *exe_file)
 static SDL_Window *window;
 
 static double get_scale(void) {
-#ifndef __APPLE__
+// SDL_GetDisplayDPI now needs a monitor. Waiting to have a good
+// solution we temporarily disable the scaling.
+#if 0 && !defined(__APPLE__)
   float dpi;
   if (SDL_GetDisplayDPI(0, NULL, &dpi, NULL) == 0)
     return dpi / 96.0;
@@ -129,15 +131,9 @@ static void init_window_icon(void) {
 #if !defined(_WIN32) && !defined(__APPLE__)
   #include "../resources/icons/icon.inl"
   (void) icon_rgba_len; /* unused */
-  SDL_Surface *surf = SDL_CreateRGBSurfaceFrom(
-    icon_rgba, 64, 64,
-    32, 64 * 4,
-    0x000000ff,
-    0x0000ff00,
-    0x00ff0000,
-    0xff000000);
+  SDL_Surface *surf = SDL_CreateSurfaceFrom(64, 64, SDL_PIXELFORMAT_ABGR8888, icon_rgba, 64 * 4);
   SDL_SetWindowIcon(window, surf);
-  SDL_FreeSurface(surf);
+  SDL_DestroySurface(surf);
 #endif
 }
 
@@ -193,18 +189,17 @@ int main(int argc, char **argv) {
   signal(SIGPIPE, SIG_IGN);
 #endif
 
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
     fprintf(stderr, "Error initializing sdl: %s", SDL_GetError());
     exit(1);
   }
   SDL_EnableScreenSaver();
-  SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
+  SDL_SetEventEnabled(SDL_EVENT_DROP_FILE, true);
   atexit(SDL_Quit);
 
   SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
   SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-  SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
-  SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
+  SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "1");
 
   /* This hint tells SDL to respect borderless window as a normal window.
   ** For example, the window will sit right on top of the taskbar instead
@@ -215,12 +210,18 @@ int main(int argc, char **argv) {
   SDL_SetHint("SDL_BORDERLESS_RESIZABLE_STYLE", "1");
   SDL_SetHint("SDL_MOUSE_DOUBLE_CLICK_RADIUS", "4");
 
-  SDL_DisplayMode dm;
-  SDL_GetCurrentDisplayMode(0, &dm);
+  SDL_DisplayID display = SDL_GetPrimaryDisplay();
+  int window_w = 1200, window_h = 800;
+  if (display) {
+    SDL_Rect usable;
+    if (SDL_GetDisplayUsableBounds(display, &usable)) {
+      window_w = usable.w * 0.8;
+      window_h = usable.h * 0.8;
+    }
+  }
 
-  window = SDL_CreateWindow(
-    "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, dm.w * 0.8, dm.h * 0.8,
-    SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
+  window = SDL_CreateWindow("", window_w, window_h,
+                            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
   init_window_icon();
   if (!window) {
     fprintf(stderr, "Error creating lite-gl window: %s", SDL_GetError());

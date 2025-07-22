@@ -85,7 +85,7 @@ endforeach
 
 pcre2_dep = dependency('libpcre2-8')
 freetype_dep = dependency('freetype2')
-sdl_dep = dependency('sdl2')
+sdl_dep = dependency('sdl3')
 fontconfig_dep = dependency('fontconfig')
 
 lite_deps = [lua_dep, sdl_dep, freetype_dep, pcre2_dep, fontconfig_dep, libm, libdl]

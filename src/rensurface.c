@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include "rensurface.h"
 
 void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, int h, int scale, bool single_surface_mode) {
@@ -9,7 +11,8 @@ void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, i
 
   if (w > 0 && h > 0) {
     const int w_scaled = w * scale, h_scaled = h * scale;
-    rs->surface = SDL_CreateRGBSurfaceWithFormat(0, w_scaled, h_scaled, 32, SDL_PIXELFORMAT_BGRA32);
+    rs->surface = SDL_CreateSurface(w_scaled, h_scaled,
+                                    SDL_PIXELFORMAT_BGRA32);
     rs->texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGRA32, SDL_TEXTUREACCESS_STATIC, w_scaled, h_scaled);
     if (!rs->surface || !rs->texture) {
       fprintf(stderr, "Error creating surface or texture: %s", SDL_GetError());
@@ -36,7 +39,7 @@ void rensurf_update_rects(RenSurface *rs, RenRect *rects, int count) {
 void rensurf_free(RenSurface *rs) {
   if (rs->surface) {
     SDL_DestroyTexture(rs->texture);
-    SDL_FreeSurface(rs->surface);
+    SDL_DestroySurface(rs->surface);
   }
 }
 
