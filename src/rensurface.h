@@ -3,7 +3,7 @@
 
 #include "rencache.h"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 struct RenSurface {
   SDL_Surface *surface;

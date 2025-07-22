@@ -17,14 +17,14 @@ if [[ "$OSTYPE" == "msys" ]]; then
     CWINDEFS="-DWINVER=0x0601 -D_WIN32_WINNT=0x0601 -DNTDDI_VERSION=0x06010000"
     CC="$CC $CWINDEFS"
     CXX="$CXX $CWINDEFS"
-    packages=(pcre2 freetype2 "sdl2 -threads -opengl -render -loadso" "lua -utf8")
+    packages=(pcre2 freetype2 "sdl3 -gpu -render" "lua -utf8")
 elif [[ "$OSTYPE" == "linux"* || "$OSTYPE" == "freebsd"* ]]; then
     # On linux opengl and render is not needed
-    packages=(pcre2 freetype2 "sdl2 -x11 -threads -opengl -render -loadso" "lua")
+    packages=(pcre2 freetype2 "sdl3 -x11 -gpu -render" "lua")
 else
     # elif [[ "$OSTYPE" == "darwin"* ]]; then
     # on macOS we need to enable opengl and render
-    packages=(pcre2 freetype2 "sdl2 -threads -opengl -render -loadso" "lua")
+    packages=(pcre2 freetype2 "sdl3 -gpu -render" "lua")
 fi
 
 packages+=(expat "fontconfig -private-config")

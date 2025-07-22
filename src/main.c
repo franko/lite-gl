@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <limits.h>
 #include "api/api.h"
 #include "renderer.h"
@@ -129,15 +129,10 @@ static void init_window_icon(void) {
 #if !defined(_WIN32) && !defined(__APPLE__)
   #include "../resources/icons/icon.inl"
   (void) icon_rgba_len; /* unused */
-  SDL_Surface *surf = SDL_CreateRGBSurfaceFrom(
-    icon_rgba, 64, 64,
-    32, 64 * 4,
-    0x000000ff,
-    0x0000ff00,
-    0x00ff0000,
-    0xff000000);
+  SDL_Surface *surf = SDL_CreateSurfaceFrom(icon_rgba, 64, 64, 64 * 4,
+                                            SDL_PIXELFORMAT_ABGR8888);
   SDL_SetWindowIcon(window, surf);
-  SDL_FreeSurface(surf);
+  SDL_DestroySurface(surf);
 #endif
 }
 
@@ -193,12 +188,12 @@ int main(int argc, char **argv) {
   signal(SIGPIPE, SIG_IGN);
 #endif
 
-  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
     fprintf(stderr, "Error initializing sdl: %s", SDL_GetError());
     exit(1);
   }
   SDL_EnableScreenSaver();
-  SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
+  SDL_SetEventEnabled(SDL_EVENT_DROP_FILE, true);
   atexit(SDL_Quit);
 
   SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
@@ -218,9 +213,8 @@ int main(int argc, char **argv) {
   SDL_DisplayMode dm;
   SDL_GetCurrentDisplayMode(0, &dm);
 
-  window = SDL_CreateWindow(
-    "", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, dm.w * 0.8, dm.h * 0.8,
-    SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
+  window = SDL_CreateWindow("", dm.w * 0.8, dm.h * 0.8,
+                            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
   init_window_icon();
   if (!window) {
     fprintf(stderr, "Error creating lite-gl window: %s", SDL_GetError());
