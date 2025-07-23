@@ -267,7 +267,7 @@ RenFont* ren_font_load(RenWindow *window_renderer, const char* path, float size,
   font->stream.close = font_file_close;
   font->stream.descriptor.pointer = file;
   font->stream.pos = 0;
-  font->stream.size = (unsigned long) SDL_SizeIO(file);
+  font->stream.size = (unsigned long) SDL_GetIOSize(file);
 
   if (FT_Open_Face(library, &(FT_Open_Args){ .flags = FT_OPEN_STREAM, .stream = &font->stream }, 0, &face))
     goto failure;

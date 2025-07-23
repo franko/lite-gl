@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <SDL3/SDL.h>
-#include <SDL_thread.h>
+#include <SDL3/SDL_thread.h>
 #include <assert.h>
 
 #if _WIN32

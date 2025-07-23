@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include "api.h"
 #include "../renderer.h"
 #include "../rensurface.h"

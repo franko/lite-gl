@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -171,7 +172,8 @@ static void push_win32_error(lua_State *L, DWORD rc) {
 
 static int f_poll_event(lua_State *L) {
   char buf[16];
-  int mx, my, w, h;
+  float mx, my;
+  int w, h;
   SDL_Event e;
   SDL_Event event_plus;
 
@@ -244,13 +246,12 @@ top:
     // --- END OF MIGRATED CODE (REVISED) ---
 
     // (The rest of the function remains the same as in the previous answer...)
-    case SDL_EVENT_DROP_FILE :
+    case SDL_EVENT_DROP_FILE:
       SDL_GetMouseState(&mx, &my);
       lua_pushstring(L, "filedropped");
-      lua_pushstring(L, e.drop.file);
+      lua_pushstring(L, (char*)e.drop.data); // data1 provides the filename
       lua_pushinteger(L, mx);
       lua_pushinteger(L, my);
-      SDL_free(e.drop.file);
       return 4;
 
     case SDL_EVENT_KEY_DOWN :
@@ -293,7 +294,7 @@ top:
       return 4;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN :
-      if (e.button.button == 1) { SDL_CaptureMouse(SDL_TRUE); }
+      if (e.button.button == 1) { SDL_CaptureMouse(true); }
       lua_pushstring(L, "mousepressed");
       lua_pushstring(L, button_name(e.button.button));
       lua_pushinteger(L, e.button.x);
@@ -302,7 +303,7 @@ top:
       return 5;
 
     case SDL_EVENT_MOUSE_BUTTON_UP :
-      if (e.button.button == 1) { SDL_CaptureMouse(SDL_FALSE); }
+      if (e.button.button == 1) { SDL_CaptureMouse(false); }
       lua_pushstring(L, "mousereleased");
       lua_pushstring(L, button_name(e.button.button));
       lua_pushinteger(L, e.button.x);
@@ -430,8 +431,7 @@ enum { WIN_NORMAL, WIN_MINIMIZED, WIN_MAXIMIZED, WIN_FULLSCREEN };
 
 static int f_set_window_mode(lua_State *L) {
   int n = luaL_checkoption(L, 1, "normal", window_opts);
-  SDL_SetWindowFullscreen(window_renderer.window,
-    n == WIN_FULLSCREEN ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+  SDL_SetWindowFullscreen(window_renderer.window, n == WIN_FULLSCREEN);
   if (n == WIN_NORMAL) { SDL_RestoreWindow(window_renderer.window); }
   if (n == WIN_MAXIMIZED) { SDL_MaximizeWindow(window_renderer.window); }
   if (n == WIN_MINIMIZED) { SDL_MinimizeWindow(window_renderer.window); }
@@ -492,7 +492,7 @@ static int f_window_has_focus(lua_State *L) {
 
 static int f_get_window_mode(lua_State *L) {
   unsigned flags = SDL_GetWindowFlags(window_renderer.window);
-  if (flags & SDL_WINDOW_FULLSCREEN_DESKTOP) {
+  if (flags & SDL_WINDOW_FULLSCREEN) {
     lua_pushstring(L, "fullscreen");
   } else if (flags & SDL_WINDOW_MINIMIZED) {
     lua_pushstring(L, "minimized");
@@ -510,26 +510,17 @@ static int f_set_text_input_rect(lua_State *L) {
   rect.y = luaL_checknumber(L, 2);
   rect.w = luaL_checknumber(L, 3);
   rect.h = luaL_checknumber(L, 4);
-  SDL_SetTextInputRect(&rect);
+  SDL_SetTextInputArea(window_renderer.window, &rect, 0);
   return 0;
 }
 
 static int f_clear_ime(lua_State *L) {
-#if SDL_VERSION_ATLEAST(2, 0, 22)
-  SDL_ClearComposition();
-#endif
+  SDL_ClearComposition(window_renderer.window);
   return 0;
 }
 
 
 static int f_raise_window(lua_State *L) {
-  /*
-    SDL_RaiseWindow should be enough but on some window managers like the
-    one used on Gnome the window needs to first have input focus in order
-    to allow the window to be focused. Also on wayland the raise window event
-    may not always be obeyed.
-  */
-  SDL_SetWindowInputFocus(window_renderer.window);
   SDL_RaiseWindow(window_renderer.window);
   return 0;
 }

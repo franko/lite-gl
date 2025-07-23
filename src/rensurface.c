@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include "rensurface.h"
 
 void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, int h, int scale, bool single_surface_mode) {
