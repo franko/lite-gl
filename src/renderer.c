@@ -28,6 +28,7 @@ static FT_Library library;
 
 // draw_rect_surface is used as a 1x1 surface to simplify ren_draw_rect with blending
 static SDL_Surface *draw_rect_surface;
+static const SDL_PixelFormatDetails *draw_rect_pixel_format;
 
 static void* check_alloc(void *ptr) {
   if (!ptr) {
@@ -413,10 +414,11 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
   SDL_Rect clip;
   SDL_GetSurfaceClipRect(surface, &clip);
 
+  const SDL_PixelFormatDetails *pixel_format = SDL_GetPixelFormatDetails(surface->format);
   const int surface_scale = rs->scale;
   double pen_x = x * surface_scale;
   y *= surface_scale;
-  int bytes_per_pixel = surface->format->BytesPerPixel;
+  const int bytes_per_pixel = pixel_format->bytes_per_pixel;
   const char* end = text + len;
   uint8_t* destination_pixels = surface->pixels;
   int clip_end_x = clip.x + clip.w, clip_end_y = clip.y + clip.h;
@@ -458,7 +460,7 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
         for (int x = glyph_start; x < glyph_end; ++x) {
           uint32_t destination_color = *destination_pixel;
           // the standard way of doing this would be SDL_GetRGBA, but that introduces a performance regression. needs to be investigated
-          SDL_Color dst = { (destination_color & surface->format->Rmask) >> surface->format->Rshift, (destination_color & surface->format->Gmask) >> surface->format->Gshift, (destination_color & surface->format->Bmask) >> surface->format->Bshift, (destination_color & surface->format->Amask) >> surface->format->Ashift };
+          SDL_Color dst = { (destination_color & pixel_format->Rmask) >> pixel_format->Rshift, (destination_color & pixel_format->Gmask) >> pixel_format->Gshift, (destination_color & pixel_format->Bmask) >> pixel_format->Bshift, (destination_color & pixel_format->Amask) >> pixel_format->Ashift };
           SDL_Color src;
 
           if (font->antialiasing == FONT_ANTIALIASING_SUBPIXEL) {
@@ -477,7 +479,7 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
           g = (color.g * src.g * color.a + dst.g * (65025 - src.g * color.a) + 32767) / 65025;
           b = (color.b * src.b * color.a + dst.b * (65025 - src.b * color.a) + 32767) / 65025;
           // the standard way of doing this would be SDL_GetRGBA, but that introduces a performance regression. needs to be investigated
-          *destination_pixel++ = dst.a << surface->format->Ashift | r << surface->format->Rshift | g << surface->format->Gshift | b << surface->format->Bshift;
+          *destination_pixel++ = dst.a << pixel_format->Ashift | r << pixel_format->Rshift | g << pixel_format->Gshift | b << pixel_format->Bshift;
         }
       }
     }
@@ -511,8 +513,9 @@ void ren_draw_rect(RenSurface *rs, RenRect rect, RenColor color) {
                          rect.width * surface_scale,
                          rect.height * surface_scale };
 
+  const SDL_PixelFormatDetails *pixel_format = SDL_GetPixelFormatDetails(surface->format);
   if (color.a == 0xff) {
-    uint32_t translated = SDL_MapRGB(surface->format, color.r, color.g, color.b);
+    uint32_t translated = SDL_MapRGB(pixel_format, NULL, color.r, color.g, color.b);
     SDL_FillSurfaceRect(surface, &dest_rect, translated);
   } else {
     // Seems like SDL doesn't handle clipping as we expect when using
@@ -522,8 +525,8 @@ void ren_draw_rect(RenSurface *rs, RenRect rect, RenColor color) {
     if (!SDL_GetRectIntersection(&clip, &dest_rect, &dest_rect)) return;
 
     uint32_t *pixel = (uint32_t *)draw_rect_surface->pixels;
-    *pixel = SDL_MapRGBA(draw_rect_surface->format, color.r, color.g, color.b, color.a);
-    SDL_BlitSurfaceScaled(draw_rect_surface, NULL, surface, &dest_rect);
+    *pixel = SDL_MapRGBA(draw_rect_pixel_format, NULL, color.r, color.g, color.b, color.a);
+    SDL_BlitSurfaceScaled(draw_rect_surface, NULL, surface, &dest_rect, SDL_SCALEMODE_NEAREST);
   }
 }
 
@@ -545,6 +548,7 @@ void ren_init(SDL_Window *win) {
   renwin_init_renderer(&window_renderer);
   // renwin_clip_to_surface(&window_renderer);
   draw_rect_surface = SDL_CreateSurface(1, 1, SDL_PIXELFORMAT_RGBA8888);
+  draw_rect_pixel_format = SDL_GetPixelFormatDetails(draw_rect_surface->format);
 }
 
 

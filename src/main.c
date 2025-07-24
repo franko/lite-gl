@@ -129,8 +129,7 @@ static void init_window_icon(void) {
 #if !defined(_WIN32) && !defined(__APPLE__)
   #include "../resources/icons/icon.inl"
   (void) icon_rgba_len; /* unused */
-  SDL_Surface *surf = SDL_CreateSurfaceFrom(icon_rgba, 64, 64, 64 * 4,
-                                            SDL_PIXELFORMAT_ABGR8888);
+  SDL_Surface *surf = SDL_CreateSurfaceFrom(64, 64, SDL_PIXELFORMAT_ABGR8888, icon_rgba, 64 * 4);
   SDL_SetWindowIcon(window, surf);
   SDL_DestroySurface(surf);
 #endif

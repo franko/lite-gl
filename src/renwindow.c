@@ -21,8 +21,7 @@ void renwin_get_size(RenWindow *ren, int *w, int *h) {
 
 void renwin_init_renderer(RenWindow *ren) {
   /* We assume here "ren" is zero-initialized */
-  ren->renderer = SDL_CreateRenderer(ren->window, NULL,
-                                     SDL_RENDERER_PRESENTVSYNC);
+  ren->renderer = SDL_CreateRenderer(ren->window, NULL);
   ren->scale = get_window_pixels_size(ren, &ren->w_pixels, &ren->h_pixels);
 }
 
@@ -34,7 +33,7 @@ void renwin_render_surface(RenWindow *ren, RenSurface *rs, int x, int y) {
   /* Width and height of the surface, in pixels. */
   int w, h;
   rensurf_get_size(rs, &w, &h);
-  const SDL_Rect dst = { x * rs->scale, y * rs->scale, w * rs->scale, h * rs->scale };
+  const SDL_FRect dst = { x * rs->scale, y * rs->scale, w * rs->scale, h * rs->scale };
   SDL_RenderTexture(ren->renderer, rs->texture, NULL, &dst);
 }
 
@@ -65,7 +64,7 @@ void renwin_free(RenWindow *ren) {
 
 void renwin_render_fill_rect(RenWindow *ren, SDL_Rect *r, SDL_Color color) {
   const int scale = ren->scale;
-  SDL_Rect r_scaled = {r->x * scale, r->y * scale, r->w * scale, r->h * scale};
+  SDL_FRect r_scaled = {r->x * scale, r->y * scale, r->w * scale, r->h * scale};
   SDL_SetRenderDrawColor(ren->renderer, color.r, color.g, color.b, color.a);
   SDL_RenderFillRect(ren->renderer, &r_scaled);
 }
