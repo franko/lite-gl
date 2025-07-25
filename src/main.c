@@ -79,7 +79,9 @@ static void setup_fontconfig(const char *exe_file)
 static SDL_Window *window;
 
 static double get_scale(void) {
-#ifndef __APPLE__
+// SDL_GetDisplayDPI now needs a monitor. Waiting to have a good
+// solution we temporarily disable the scaling.
+#if 0 && !defined(__APPLE__)
   float dpi;
   if (SDL_GetDisplayDPI(0, NULL, &dpi, NULL) == 0)
     return dpi / 96.0;
@@ -197,8 +199,7 @@ int main(int argc, char **argv) {
 
   SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
   SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
-  SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
-  SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
+  SDL_SetHint(SDL_HINT_IME_IMPLEMENTED_UI, "1");
 
   /* This hint tells SDL to respect borderless window as a normal window.
   ** For example, the window will sit right on top of the taskbar instead
@@ -209,10 +210,11 @@ int main(int argc, char **argv) {
   SDL_SetHint("SDL_BORDERLESS_RESIZABLE_STYLE", "1");
   SDL_SetHint("SDL_MOUSE_DOUBLE_CLICK_RADIUS", "4");
 
-  SDL_DisplayMode dm;
-  SDL_GetCurrentDisplayMode(0, &dm);
+  // TO REVIEW: upon transition to SDL*, on linux it returns NULL.
+  // Needs further investigations.
+  const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(0);
 
-  window = SDL_CreateWindow("", dm.w * 0.8, dm.h * 0.8,
+  window = SDL_CreateWindow("", dm ? dm->w * 0.8 : 800, dm ? dm->h * 0.8 : 600,
                             SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
   init_window_icon();
   if (!window) {
