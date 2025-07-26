@@ -210,11 +210,17 @@ int main(int argc, char **argv) {
   SDL_SetHint("SDL_BORDERLESS_RESIZABLE_STYLE", "1");
   SDL_SetHint("SDL_MOUSE_DOUBLE_CLICK_RADIUS", "4");
 
-  // TO REVIEW: upon transition to SDL*, on linux it returns NULL.
-  // Needs further investigations.
-  const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(0);
+  SDL_DisplayID display = SDL_GetPrimaryDisplay();
+  int window_w = 1200, window_h = 800;
+  if (display) {
+    SDL_Rect usable;
+    if (SDL_GetDisplayUsableBounds(display, &usable)) {
+      window_w = usable.w * 0.8;
+      window_h = usable.h * 0.8;
+    }
+  }
 
-  window = SDL_CreateWindow("", dm ? dm->w * 0.8 : 800, dm ? dm->h * 0.8 : 600,
+  window = SDL_CreateWindow("", window_w, window_h,
                             SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
   init_window_icon();
   if (!window) {
