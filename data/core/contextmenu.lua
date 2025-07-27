@@ -43,14 +43,13 @@ function ContextMenu:new()
   self.selected = -1
   self.height = 0
   self.position = { x = 0, y = 0 }
-  self.current_scale = SCALE
 end
 
 local function get_item_size(item)
   local lw, lh
   if item == DIVIDER then
     lw = 0
-    lh = divider_width + divider_padding * SCALE * 2
+    lh = divider_width + divider_padding * 2
   else
     lw = style.font:get_width(item.text)
     if item.info then
@@ -249,13 +248,7 @@ end
 ---@see core.contextmenu.draw_context_menu
 function ContextMenu:draw()
   if not self.show_context_menu then return end
-  if self.current_scale ~= SCALE then
-    update_items_size(self.items)
-    for _, set in ipairs(self.itemset) do
-      update_items_size(set.items)
-    end
-    self.current_scale = SCALE
-  end
+  -- Scale checking removed - high-DPI now handled in C layer
   core.root_view:defer_draw(self.draw_context_menu, self)
 end
 
@@ -275,7 +268,7 @@ function ContextMenu:draw_context_menu()
 
   for i, item, x, y, w, h in self:each_item() do
     if item == DIVIDER then
-      renderer.draw_rect(x, y + divider_padding * SCALE, w, divider_width, style.divider)
+      renderer.draw_rect(x, y + divider_padding, w, divider_width, style.divider)
     else
       if i == self.selected then
         renderer.draw_rect(x, y, w, h, style.selection)

@@ -1,12 +1,12 @@
 local common = require "core.common"
 local style = {}
 
-style.padding = { x = common.round(14 * SCALE), y = common.round(7 * SCALE) }
-style.divider_size = common.round(1 * SCALE)
-style.scrollbar_size = common.round(4 * SCALE)
-style.expanded_scrollbar_size = common.round(12 * SCALE)
-style.caret_width = common.round(2 * SCALE)
-style.tab_width = common.round(170 * SCALE)
+style.padding = { x = 14, y = 7 }
+style.divider_size = 1
+style.scrollbar_size = 4
+style.expanded_scrollbar_size = 12
+style.caret_width = 2
+style.tab_width = 170
 
 -- The function renderer.font.load can accept an option table as a second optional argument.
 -- It shoud be like the following:
@@ -24,12 +24,12 @@ style.tab_width = common.round(170 * SCALE)
 -- The antialiasing grayscale with full hinting is interesting for crisp font rendering.
 local code_font, code_size = "JetBrains Mono", 15
 local ui_font, ui_size = "FiraSans", 15
-style.font = renderer.font.load(ui_font, ui_size * SCALE)
-style.big_font = style.font:copy(46 * SCALE)
-style.icon_font = renderer.font.load("icons", 16 * SCALE, {antialiasing="grayscale", hinting="full"})
-style.icon_big_font = style.icon_font:copy(23 * SCALE)
-style.code_font = renderer.font.load(code_font, code_size * SCALE)
-style.code_font_bold = renderer.font.load(code_font .. ":bold", code_size * SCALE)
+style.font = renderer.font.load(ui_font, ui_size)
+style.big_font = style.font:copy(46)
+style.icon_font = renderer.font.load("icons", 16, {antialiasing="grayscale", hinting="full"})
+style.icon_big_font = style.icon_font:copy(23)
+style.code_font = renderer.font.load(code_font, code_size)
+style.code_font_bold = renderer.font.load(code_font .. ":bold", code_size)
 
 style.syntax = {}
 
@@ -38,7 +38,7 @@ style.syntax = {}
 -- override style.code_font on a per-token basis, so you can choose to eg.
 -- render comments in an italic font if you want to.
 style.syntax_fonts = {}
--- style.syntax_fonts["comment"] = renderer.font.load(code_font .. ":italic", code_size * SCALE)
+-- style.syntax_fonts["comment"] = renderer.font.load(code_font .. ":italic", code_size)
 
 style.log = {}
 

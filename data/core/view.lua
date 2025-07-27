@@ -20,7 +20,6 @@ function View:new()
   self.scrollable = false
   self.v_scrollbar = Scrollbar(self, {direction = "v", alignment = "e"})
   self.h_scrollbar = Scrollbar(self, {direction = "h", alignment = "e"})
-  self.current_scale = SCALE
 
   -- drawing surfaces variables
   -- name_surfaces is used to store and persist drawing surfaces. The keys are
@@ -245,12 +244,6 @@ function View:on_mouse_wheel(y, x)
   -- no-op
 end
 
----Can be overriden to listen for scale change events to apply
----any neccesary changes in sizes, padding, etc...
----@param new_scale number
----@param prev_scale number
-function View:on_scale_change(new_scale, prev_scale) end
-
 function View:get_content_bounds()
   local x = self.scroll.x
   local y = self.scroll.y
@@ -288,11 +281,6 @@ end
 
 
 function View:update()
-  if self.current_scale ~= SCALE then
-    self:on_scale_change(SCALE, self.current_scale)
-    self.current_scale = SCALE
-  end
-
   self:clamp_scroll_position()
   self:move_towards(self.scroll, "x", self.scroll.to.x, 0.3, "scroll")
   self:move_towards(self.scroll, "y", self.scroll.to.y, 0.3, "scroll")

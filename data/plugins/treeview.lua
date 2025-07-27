@@ -13,7 +13,7 @@ local CommandView = require "core.commandview"
 
 config.plugins.treeview = common.merge({
   -- Default treeview width
-  size = 200 * SCALE
+  size = 200
 }, config.plugins.treeview)
 
 local tooltip_offset = style.font:get_height()
@@ -22,7 +22,7 @@ local tooltip_delay = 0.5
 local tooltip_alpha = 255
 local tooltip_alpha_rate = 1
 
-local surface_base_width = 110 * SCALE
+local surface_base_width = 110
 
 local function get_depth(filename)
   local n = 1
@@ -865,19 +865,19 @@ config.plugins.treeview.config_spec = {
     description = "Default treeview width.",
     path = "size",
     type = "number",
-    default = toolbar_view and math.ceil(toolbar_view:get_min_width() / SCALE)
-      or 200 * SCALE,
-    min = toolbar_view and toolbar_view:get_min_width() / SCALE
-      or 200 * SCALE,
+    default = toolbar_view and toolbar_view:get_min_width()
+      or 200,
+    min = toolbar_view and toolbar_view:get_min_width()
+      or 200,
     get_value = function(value)
-      return value / SCALE
+      return value
     end,
     set_value = function(value)
-      return value * SCALE
+      return value
     end,
     on_apply = function(value)
       view:set_target_size("x", math.max(
-        value, toolbar_view and toolbar_view:get_min_width() or 200 * SCALE
+        value, toolbar_view and toolbar_view:get_min_width() or 200
       ))
     end
   },

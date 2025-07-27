@@ -21,7 +21,7 @@ config.plugins.bracketmatch = common.merge({
    -- color the bracket
   color_char = false,
   -- the size of the lines used in "underline" and "frame"
-  line_size = math.ceil(1 * SCALE),
+  line_size = 1,
    -- The config specification used by the settings gui
   config_spec = {
     name = "Bracket Match",
@@ -61,10 +61,10 @@ config.plugins.bracketmatch = common.merge({
       min = 1,
       step = 1,
       get_value = function(value)
-        return math.floor(value / SCALE)
+        return math.floor(value)
       end,
       set_value = function(value)
-        return math.ceil(value * SCALE)
+        return math.ceil(value)
       end
     }
   }

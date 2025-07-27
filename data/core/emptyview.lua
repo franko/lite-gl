@@ -29,7 +29,7 @@ local function draw_text(x, y, color)
   x = renderer.draw_text(style.big_font, title, x1, y1, color)
   renderer.draw_text(style.font, version, xv, y1 + th, color)
   x = x + style.padding.x
-  renderer.draw_rect(x, y, math.ceil(1 * SCALE), dh, color)
+  renderer.draw_rect(x, y, 1, dh, color)
   th = style.font:get_height()
   y = y + (dh - (th + style.padding.y) * #lines) / 2
   local w = 0

@@ -72,13 +72,6 @@ local cmds = {
   { text = "Replace", command = "find-replace:replace" }
 }
 
-if config.plugins.scale ~= false and require("plugins.scale") then
-  table.move(cmds, 4, 6, 7)
-  cmds[4] = { text = "Font +",     command = "scale:increase" }
-  cmds[5] = { text = "Font -",     command = "scale:decrease" }
-  cmds[6] = { text = "Font Reset", command = "scale:reset"    }
-end
-
 menu:register("core.docview", cmds)
 
 
