@@ -5,9 +5,9 @@ local config = require "core.config"
 local View = require "core.view"
 local style = require "core.style"
 
-local BORDER_WIDTH = common.round(1 * SCALE)
-local UNDERLINE_WIDTH = common.round(2 * SCALE)
-local UNDERLINE_MARGIN = common.round(1 * SCALE)
+local BORDER_WIDTH = 1
+local UNDERLINE_WIDTH = 2
+local UNDERLINE_MARGIN = 1
 
 local noop = function() end
 
@@ -243,16 +243,6 @@ function NagView:draw()
     return
   end
   core.root_view:defer_draw(draw_nagview_message, self)
-end
-
-function NagView:on_scale_change(new_scale, old_scale)
-  BORDER_WIDTH = common.round(1 * new_scale)
-  UNDERLINE_WIDTH = common.round(2 * new_scale)
-  UNDERLINE_MARGIN = common.round(1 * new_scale)
-  self.target_height = math.max(
-    self:get_message_height(),
-    self:get_buttons_height()
-  )
 end
 
 function NagView:get_message_height()

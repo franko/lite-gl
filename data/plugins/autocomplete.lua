@@ -320,8 +320,8 @@ local function get_suggestions_rect(av)
   if max_width > core.root_view.size.x then
     max_width = core.root_view.size.x
   end
-  if max_width < 150 * SCALE then
-    max_width = 150 * SCALE
+  if max_width < 150 then
+    max_width = 150
   end
 
   -- if portion not visiable to right, reposition to DocView right margin
@@ -375,17 +375,10 @@ local function wrap_line(line, max_chars)
   return line
 end
 
-local previous_scale = SCALE
 local desc_font = style.code_font:copy(
-  config.plugins.autocomplete.desc_font_size * SCALE
+  config.plugins.autocomplete.desc_font_size
 )
 local function draw_description_box(text, av, sx, sy, sw, sh)
-  if previous_scale ~= SCALE then
-    desc_font = style.code_font:copy(
-      config.plugins.autocomplete.desc_font_size * SCALE
-    )
-    previous_scale = SCALE
-  end
 
   local font = desc_font
   local lh = font:get_height()

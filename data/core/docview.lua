@@ -505,7 +505,7 @@ function DocView:draw_line_highlight(line)
   local _, y = self:get_line_screen_position(line)
   local h = self.tiles_metric.line_height
   local limits = self.tiles_metric.limits
-  local line_size = math.max(1, SCALE)
+  local line_size = 1
   renderer.render_fill_rect(limits.x1, y, limits.x2 - limits.x1, line_size, style.line_number)
   renderer.render_fill_rect(limits.x1, y + h - line_size, limits.x2 - limits.x1, line_size, style.line_number)
 
@@ -680,7 +680,7 @@ end
 
 function DocView:draw_ime_decoration(line1, col1, line2, col2)
   local x, y = self:get_line_screen_position(line1)
-  local line_size = math.max(1, SCALE)
+  local line_size = 1
   local lh = self.tiles_metric.line_height
 
   -- Draw IME underline

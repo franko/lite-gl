@@ -504,12 +504,12 @@ local style = require "core.style"
 -- with the application.
 -- For example on Ubuntu you may use:
 --
--- style.font = renderer.font.load("Ubuntu", 15 * SCALE)
--- style.code_font = renderer.font.load("Ubuntu Mono", 17 * SCALE)
+-- style.font = renderer.font.load("Ubuntu", 15)
+-- style.code_font = renderer.font.load("Ubuntu Mono", 17)
 --
 -- It is possible to load fonts in "bold" or "italic" style using the syntax:
--- style.code_font = renderer.font.load("Ubuntu Mono:bold", 17 * SCALE)
--- style.code_font = renderer.font.load("Ubuntu Mono:italic", 17 * SCALE)
+-- style.code_font = renderer.font.load("Ubuntu Mono:bold", 17)
+-- style.code_font = renderer.font.load("Ubuntu Mono:italic", 17)
 --
 -- font names used by lite:
 -- style.font          : user interface
