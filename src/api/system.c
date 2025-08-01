@@ -254,29 +254,29 @@ top:
       lua_pushinteger(L, my);
       return 4;
 
-    case SDL_EVENT_KEY_DOWN :
+    case SDL_EVENT_KEY_DOWN:
       lua_pushstring(L, "keypressed");
       lua_pushstring(L, get_key_name(&e, buf));
       return 2;
 
-    case SDL_EVENT_KEY_UP :
+    case SDL_EVENT_KEY_UP:
       lua_pushstring(L, "keyreleased");
       lua_pushstring(L, get_key_name(&e, buf));
       return 2;
 
-    case SDL_EVENT_TEXT_INPUT :
+    case SDL_EVENT_TEXT_INPUT:
       lua_pushstring(L, "textinput");
       lua_pushstring(L, e.text.text);
       return 2;
 
-    case SDL_EVENT_TEXT_EDITING :
+    case SDL_EVENT_TEXT_EDITING:
       lua_pushstring(L, "textediting");
       lua_pushstring(L, e.edit.text);
       lua_pushinteger(L, e.edit.start);
       lua_pushinteger(L, e.edit.length);
       return 4;
 
-    case SDL_EVENT_MOUSE_BUTTON_DOWN :
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
       if (e.button.button == 1) { SDL_CaptureMouse(true); }
       lua_pushstring(L, "mousepressed");
       lua_pushstring(L, button_name(e.button.button));
@@ -285,7 +285,7 @@ top:
       lua_pushinteger(L, e.button.clicks);
       return 5;
 
-    case SDL_EVENT_MOUSE_BUTTON_UP :
+    case SDL_EVENT_MOUSE_BUTTON_UP:
       if (e.button.button == 1) { SDL_CaptureMouse(false); }
       lua_pushstring(L, "mousereleased");
       lua_pushstring(L, button_name(e.button.button));
@@ -293,7 +293,7 @@ top:
       lua_pushinteger(L, e.button.y);
       return 4;
 
-    case SDL_EVENT_MOUSE_MOTION :
+    case SDL_EVENT_MOUSE_MOTION:
       SDL_PumpEvents();
       while (SDL_PeepEvents(&event_plus, 1, SDL_GETEVENT, SDL_EVENT_MOUSE_MOTION, SDL_EVENT_MOUSE_MOTION) > 0) {
         e.motion.x = event_plus.motion.x;
@@ -308,13 +308,13 @@ top:
       lua_pushinteger(L, e.motion.yrel);
       return 5;
 
-    case SDL_EVENT_MOUSE_WHEEL :
+    case SDL_EVENT_MOUSE_WHEEL:
       lua_pushstring(L, "mousewheel");
       lua_pushnumber(L, e.wheel.y);
       lua_pushnumber(L, -e.wheel.x);
       return 3;
 
-      case SDL_EVENT_FINGER_DOWN :
+      case SDL_EVENT_FINGER_DOWN:
       SDL_GetWindowSize(window_renderer.window, &w, &h);
 
       lua_pushstring(L, "touchpressed");
@@ -323,7 +323,7 @@ top:
       lua_pushinteger(L, e.tfinger.fingerID);
       return 4;
 
-    case SDL_EVENT_FINGER_UP :
+    case SDL_EVENT_FINGER_UP:
       SDL_GetWindowSize(window_renderer.window, &w, &h);
 
       lua_pushstring(L, "touchreleased");
@@ -332,7 +332,7 @@ top:
       lua_pushinteger(L, e.tfinger.fingerID);
       return 4;
 
-    case SDL_EVENT_FINGER_MOTION :
+    case SDL_EVENT_FINGER_MOTION:
       SDL_PumpEvents();
       while (SDL_PeepEvents(&event_plus, 1, SDL_GETEVENT, SDL_EVENT_FINGER_MOTION, SDL_EVENT_FINGER_MOTION) > 0) {
         e.tfinger.x = event_plus.tfinger.x;
