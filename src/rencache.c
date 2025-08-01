@@ -20,10 +20,10 @@
 #include "rencache.h"
 #include "renwindow.h"
 
-/* a cache over the software renderer -- all drawing operations are stored as
-** commands when issued. At the end of the frame we write the commands to a grid
-** of hash values, take the cells that have changed since the previous frame,
-** merge them into dirty rectangles and redraw only those regions */
+/* A cache over the software renderer. All drawing operations are stored as
+** commands. At the end of the frame, a single hash of the command buffer is
+** generated and compared to the previous frame's hash. If the hashes differ,
+** the entire screen is redrawn. This avoids redrawing for static frames. */
 
 #define CMD_BUF_RESIZE_RATE 1.2
 #define CMD_BUF_INIT_SIZE (1024 * 512)
@@ -62,18 +62,14 @@ typedef struct {
 #define HASH_INITIAL 2166136261
 
 void rencache_init(RenCache *cache, int x, int y) {
-  cache->cells_buf1 = cache->whole_surface_cells;
-  cache->cells_buf2 = cache->whole_surface_cells + 1;
-  cache->rect_buf = cache->whole_surface_rect;
-  cache->cells_prev = cache->cells_buf1;
-  cache->cells = cache->cells_buf2;
   cache->command_buf_size = 0;
   cache->command_buf = NULL;
   cache->resize_issue = false;
   cache->command_buf_idx = 0;
+  cache->current_hash = HASH_INITIAL;
+  cache->previous_hash = HASH_INITIAL - 1; // Ensure first frame always draws
   cache->surface_rect = (RenRect){0};
   cache->last_clip_rect = (RenRect){0};
-  cache->rect_count = 0;
   cache->x_origin = x;
   cache->y_origin = y;
   cache->show_debug = false;
@@ -115,14 +111,6 @@ static RenRect intersect_rects(RenRect a, RenRect b) {
   return (RenRect) { x1, y1, rencache_max(0, x2 - x1), rencache_max(0, y2 - y1) };
 }
 
-
-static RenRect merge_rects(RenRect a, RenRect b) {
-  int x1 = rencache_min(a.x, b.x);
-  int y1 = rencache_min(a.y, b.y);
-  int x2 = rencache_max(a.x + a.width, b.x + b.width);
-  int y2 = rencache_max(a.y + a.height, b.y + b.height);
-  return (RenRect) { x1, y1, x2 - x1, y2 - y1 };
-}
 
 static bool expand_command_buffer(RenCache* cache) {
   size_t new_size = cache->command_buf_size * CMD_BUF_RESIZE_RATE;
@@ -226,131 +214,76 @@ double rencache_draw_text(RenCache* cache, RenFont **fonts, const char *text, si
 
 
 void rencache_begin_frame(RenCache* cache, RenSurface* rs) {
-  /* reset all cells if the screen width/height has changed */
+  /* reset state if the screen width/height has changed */
   int w, h;
   rensurf_get_size(rs, &w, &h);
   cache->resize_issue = false;
+
   if (cache->surface_rect.width != w || h != cache->surface_rect.height) {
     cache->surface_rect.width = w;
     cache->surface_rect.height = h;
     cache->first_draw = true;
+    cache->previous_hash = HASH_INITIAL - 1; // Force redraw on resize
   }
+
   cache->command_buf_idx = 0;
-  cache->last_clip_rect = cache->surface_rect;
+  cache->current_hash = HASH_INITIAL;
+  cache->last_clip_rect = cache->surface_rect; // Clip to whole surface initially
   cache->frame_started = true;
 }
 
 
-static void push_rect(RenCache* cache, RenRect r, int *count) {
-  /* try to merge with existing rectangle */
-  for (int i = *count - 1; i >= 0; i--) {
-    RenRect *rp = &cache->rect_buf[i];
-    if (rects_overlap(*rp, r)) {
-      *rp = merge_rects(*rp, r);
-      return;
-    }
-  }
-  /* couldn't merge with previous rectangle: push */
-  cache->rect_buf[(*count)++] = r;
-}
-
-
 void rencache_end_frame(RenCache* cache, RenSurface *rs) {
-  int max_x = 1;
-  int max_y = 1;
-
-  if (cache->first_draw) {
-    int idx = 0;
-    cache->cells[idx] = HASH_INITIAL;
-    cache->cells_prev[idx] = HASH_INITIAL;
-  }
-
-  /* update cells from commands */
+  /* 1. Calculate a single hash for the entire frame's commands */
   Command *cmd = NULL;
   RenRect cr = cache->surface_rect;
   while (next_command(cache, &cmd)) {
-    /* cmd->command[0] should always be the Command rect */
+    // We still need to respect clip rects for the hash calculation
     if (cmd->type == SET_CLIP) { cr = cmd->command[0]; }
     RenRect r = intersect_rects(cmd->command[0], cr);
     if (r.width == 0 || r.height == 0) { continue; }
-    unsigned h = HASH_INITIAL;
-    hash(&h, cmd, cmd->size);
-    hash(&cache->cells[0], &h, sizeof(unsigned));
+
+    hash(&cache->current_hash, cmd, cmd->size);
   }
 
-  if (cache->first_draw) {
-    push_rect(cache, (RenRect) { 0, 0, max_x, max_y }, &cache->rect_count);
-  } else {
-    /* push rects for all cells changed from last frame, reset cells */
-    cache->rect_count = 0;
-    /* compare previous and current cell for change */
-    int idx = 0;
-    if (cache->cells[idx] != cache->cells_prev[idx]) {
-      push_rect(cache, (RenRect) { 0, 0, 1, 1 }, &cache->rect_count);
-    }
-    cache->cells_prev[idx] = HASH_INITIAL;
+  /* 2. Compare hash with previous frame. If unchanged, do nothing. */
+  if (!cache->first_draw && cache->current_hash == cache->previous_hash) {
+    cache->frame_started = false;
+    return; // Perfect cache hit, nothing to do.
   }
 
-  /* expand rects from cells to pixels */
-  const int cell_size_x = cache->surface_rect.width;
-  const int cell_size_y = cache->surface_rect.height;
-  for (int i = 0; i < cache->rect_count; i++) {
-    RenRect *r = &cache->rect_buf[i];
-    r->x *= cell_size_x;
-    r->y *= cell_size_y;
-    r->width *= cell_size_x;
-    r->height *= cell_size_y;
-    *r = intersect_rects(*r, cache->surface_rect);
-  }
+  /* 3. Hashes differ (or first frame), so redraw the entire screen. */
+  ren_set_clip_rect(rs, cache->surface_rect);
 
-  /* redraw updated regions */
-  for (int i = 0; i < cache->rect_count; i++) {
-    /* draw */
-    RenRect r = cache->rect_buf[i];
-    ren_set_clip_rect(rs, r);
-
-    cmd = NULL;
-    while (next_command(cache, &cmd)) {
-      SetClipCommand *ccmd = (SetClipCommand*)&cmd->command;
-      DrawRectCommand *rcmd = (DrawRectCommand*)&cmd->command;
-      DrawTextCommand *tcmd = (DrawTextCommand*)&cmd->command;
-      switch (cmd->type) {
-        case SET_CLIP:
-          ren_set_clip_rect(rs, intersect_rects(ccmd->rect, r));
-          break;
-        case DRAW_RECT:
-          ren_draw_rect(rs, rcmd->rect, rcmd->color);
-          break;
-        case DRAW_TEXT:
-          ren_font_group_set_tab_size(tcmd->fonts, tcmd->tab_size);
-          ren_draw_text(rs, tcmd->fonts, tcmd->text, tcmd->len, tcmd->text_x, tcmd->rect.y, tcmd->color);
-          break;
-      }
-    }
-
-    if (cache->show_debug) {
-      RenColor color = { rand(), rand(), rand(), 50 };
-      ren_draw_rect(rs, r, color);
+  cmd = NULL;
+  while (next_command(cache, &cmd)) {
+    SetClipCommand *ccmd = (SetClipCommand*)&cmd->command;
+    DrawRectCommand *rcmd = (DrawRectCommand*)&cmd->command;
+    DrawTextCommand *tcmd = (DrawTextCommand*)&cmd->command;
+    switch (cmd->type) {
+      case SET_CLIP:
+        ren_set_clip_rect(rs, intersect_rects(ccmd->rect, cache->surface_rect));
+        break;
+      case DRAW_RECT:
+        ren_draw_rect(rs, rcmd->rect, rcmd->color);
+        break;
+      case DRAW_TEXT:
+        ren_font_group_set_tab_size(tcmd->fonts, tcmd->tab_size);
+        ren_draw_text(rs, tcmd->fonts, tcmd->text, tcmd->len, tcmd->text_x, tcmd->rect.y, tcmd->color);
+        break;
     }
   }
 
+  if (cache->show_debug) {
+    RenColor color = { rand(), rand(), rand(), 50 };
+    ren_draw_rect(rs, cache->surface_rect, color);
+  }
+
+  /* 4. Mark the entire window surface for update */
+  rensurf_update_rects(rs, &cache->surface_rect, 1);
+
+  /* 5. Store hash for next frame and update state */
+  cache->previous_hash = cache->current_hash;
   cache->frame_started = false;
   cache->first_draw = false;
 }
-
-
-void  rencache_update_rects(RenCache* cache, RenSurface *rs) {
-  /* update dirty rects */
-  if (cache->rect_count > 0) {
-    rensurf_update_rects(rs, cache->rect_buf, cache->rect_count);
-  }
-}
-
-
-void rencache_swap_buffers(RenCache* cache) {
-  /* swap cell buffer and reset */
-  unsigned *tmp = cache->cells;
-  cache->cells = cache->cells_prev;
-  cache->cells_prev = tmp;
-}
-

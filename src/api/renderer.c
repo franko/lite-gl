@@ -406,8 +406,6 @@ static int f_present_surface(lua_State *L) {
   int x = rs->rencache.x_origin, y = rs->rencache.y_origin;
   if (rs->rencache.frame_started) {
     rencache_end_frame(&rs->rencache, rs);
-    rencache_update_rects(&rs->rencache, rs);
-    rencache_swap_buffers(&rs->rencache);
   }
   renwin_render_surface(&window_renderer, rs, x, y);
   return 0;

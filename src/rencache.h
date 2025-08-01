@@ -9,24 +9,23 @@
 #define CELLS_Y 50
 
 typedef struct RenCache {
-    unsigned *cells_buf1;
-    unsigned *cells_buf2;
-    unsigned *cells_prev;
-    unsigned *cells;
-    RenRect *rect_buf;
+    // Buffers for command storage remain
     size_t command_buf_size;
     uint8_t *command_buf;
-    bool resize_issue;
     int command_buf_idx;
+    bool resize_issue;
+
+    // Simplified hash tracking
+    unsigned current_hash;
+    unsigned previous_hash;
+
+    // Frame state
     RenRect surface_rect;
     RenRect last_clip_rect;
-    int rect_count;
     int x_origin, y_origin;
     bool frame_started;
     bool first_draw;
     bool show_debug;
-    unsigned whole_surface_cells[2];
-    RenRect whole_surface_rect[1];
 } RenCache;
 
 void rencache_init(RenCache *cache, int x_origin, int y_origin);
@@ -38,7 +37,5 @@ double rencache_draw_text(RenCache* cache, RenFont **font, const char *text, siz
 void  rencache_invalidate(RenCache* cache);
 void  rencache_begin_frame(RenCache* cache, RenSurface* rs);
 void  rencache_end_frame(RenCache* cache, RenSurface* rs);
-void  rencache_swap_buffers(RenCache* cache);
-void  rencache_update_rects(RenCache* cache, RenSurface *rs);
 
 #endif
