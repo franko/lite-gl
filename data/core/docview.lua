@@ -557,7 +557,7 @@ function DocView:draw_line_selection(line, x, y)
       local x2 = x + self:get_col_x_offset(line, col2)
       if x1 ~= x2 then
         local line_id = ">" .. line
-        self:set_surface_for(line_id, x1, y, x2 - x1, lh, style.selection, true)
+        self:set_surface_for(line_id, x1, y, x2 - x1, lh, style.selection)
         self:draw_line_text(line, x, y)
         self.used_tiles_ids[line_id] = true
       end

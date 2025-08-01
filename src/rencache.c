@@ -25,7 +25,6 @@
 ** of hash values, take the cells that have changed since the previous frame,
 ** merge them into dirty rectangles and redraw only those regions */
 
-#define CELL_SIZE 96
 #define CMD_BUF_RESIZE_RATE 1.2
 #define CMD_BUF_INIT_SIZE (1024 * 512)
 #define COMMAND_BARE_SIZE offsetof(Command, command)
@@ -62,20 +61,10 @@ typedef struct {
 /* 32bit fnv-1a hash */
 #define HASH_INITIAL 2166136261
 
-void rencache_init(RenCache *cache, int x, int y, bool single_surface_mode) {
-  cache->single_surface_mode = single_surface_mode;
-  if (!single_surface_mode) {
-    const size_t buf_cell_sz = sizeof(unsigned) * CELLS_X * CELLS_Y;
-    const size_t buf_rect_sz = sizeof(RenRect) * CELLS_X * CELLS_Y / 2;
-    void *buffer = malloc(buf_cell_sz * 2 + buf_rect_sz);
-    cache->cells_buf1 = (unsigned *) buffer;
-    cache->cells_buf2 = (unsigned *) ((char *)buffer + buf_cell_sz);
-    cache->rect_buf = (RenRect *)((char *)buffer + 2 * buf_cell_sz);
-  } else {
-    cache->cells_buf1 = cache->whole_surface_cells;
-    cache->cells_buf2 = cache->whole_surface_cells + 1;
-    cache->rect_buf = cache->whole_surface_rect;
-  }
+void rencache_init(RenCache *cache, int x, int y) {
+  cache->cells_buf1 = cache->whole_surface_cells;
+  cache->cells_buf2 = cache->whole_surface_cells + 1;
+  cache->rect_buf = cache->whole_surface_rect;
   cache->cells_prev = cache->cells_buf1;
   cache->cells = cache->cells_buf2;
   cache->command_buf_size = 0;
@@ -109,11 +98,6 @@ static void hash(unsigned *h, const void *data, int size) {
   while (size--) {
     *h = (*h ^ *p++) * 16777619;
   }
-}
-
-
-static inline int cell_idx(int x, int y) {
-  return x + y * CELLS_X;
 }
 
 
@@ -257,21 +241,6 @@ void rencache_begin_frame(RenCache* cache, RenSurface* rs) {
 }
 
 
-static void update_overlapping_cells(RenCache* cache, RenRect r, unsigned h) {
-  int x1 = r.x / CELL_SIZE;
-  int y1 = r.y / CELL_SIZE;
-  int x2 = (r.x + r.width) / CELL_SIZE;
-  int y2 = (r.y + r.height) / CELL_SIZE;
-
-  for (int y = y1; y <= y2; y++) {
-    for (int x = x1; x <= x2; x++) {
-      int idx = cell_idx(x, y);
-      hash(&cache->cells[idx], &h, sizeof(h));
-    }
-  }
-}
-
-
 static void push_rect(RenCache* cache, RenRect r, int *count) {
   /* try to merge with existing rectangle */
   for (int i = *count - 1; i >= 0; i--) {
@@ -287,17 +256,13 @@ static void push_rect(RenCache* cache, RenRect r, int *count) {
 
 
 void rencache_end_frame(RenCache* cache, RenSurface *rs) {
-  int max_x = cache->single_surface_mode ? 1 : cache->surface_rect.width / CELL_SIZE + 1;
-  int max_y = cache->single_surface_mode ? 1 : cache->surface_rect.height / CELL_SIZE + 1;
+  int max_x = 1;
+  int max_y = 1;
 
   if (cache->first_draw) {
-    for (int y = 0; y < max_y; y++) {
-      for (int x = 0; x < max_x; x++) {
-        int idx = cell_idx(x, y);
-        cache->cells[idx] = HASH_INITIAL;
-        cache->cells_prev[idx] = HASH_INITIAL;
-      }
-    }
+    int idx = 0;
+    cache->cells[idx] = HASH_INITIAL;
+    cache->cells_prev[idx] = HASH_INITIAL;
   }
 
   /* update cells from commands */
@@ -310,11 +275,7 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
     if (r.width == 0 || r.height == 0) { continue; }
     unsigned h = HASH_INITIAL;
     hash(&h, cmd, cmd->size);
-    if (cache->single_surface_mode) {
-      hash(&cache->cells[0], &h, sizeof(unsigned));
-    } else {
-      update_overlapping_cells(cache, r, h);
-    }
+    hash(&cache->cells[0], &h, sizeof(unsigned));
   }
 
   if (cache->first_draw) {
@@ -322,21 +283,17 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
   } else {
     /* push rects for all cells changed from last frame, reset cells */
     cache->rect_count = 0;
-    for (int y = 0; y < max_y; y++) {
-      for (int x = 0; x < max_x; x++) {
-        /* compare previous and current cell for change */
-        int idx = cell_idx(x, y);
-        if (cache->cells[idx] != cache->cells_prev[idx]) {
-          push_rect(cache, (RenRect) { x, y, 1, 1 }, &cache->rect_count);
-        }
-        cache->cells_prev[idx] = HASH_INITIAL;
-      }
+    /* compare previous and current cell for change */
+    int idx = 0;
+    if (cache->cells[idx] != cache->cells_prev[idx]) {
+      push_rect(cache, (RenRect) { 0, 0, 1, 1 }, &cache->rect_count);
     }
+    cache->cells_prev[idx] = HASH_INITIAL;
   }
 
   /* expand rects from cells to pixels */
-  const int cell_size_x = (cache->single_surface_mode ? cache->surface_rect.width  : CELL_SIZE);
-  const int cell_size_y = (cache->single_surface_mode ? cache->surface_rect.height : CELL_SIZE);
+  const int cell_size_x = cache->surface_rect.width;
+  const int cell_size_y = cache->surface_rect.height;
   for (int i = 0; i < cache->rect_count; i++) {
     RenRect *r = &cache->rect_buf[i];
     r->x *= cell_size_x;
