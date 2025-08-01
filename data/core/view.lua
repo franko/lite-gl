@@ -40,7 +40,7 @@ end
 -- select a surface from a list, create one and add to it if it doesn't exist.
 -- adjust the size if it does not match with the existing surface.
 -- ensure the surface is associated with the given position
-function View.surface_from_list(surface_list, id, x, y, w, h, single_mode)
+function View.surface_from_list(surface_list, id, x, y, w, h)
   local surface = surface_list[id]
   local surf_x, surf_y, surf_w, surf_h
   local needs_drawing = false
@@ -49,7 +49,7 @@ function View.surface_from_list(surface_list, id, x, y, w, h, single_mode)
   end
   if not surface or surf_w ~= w or surf_h ~= h then
     -- if we have no surface or the size does not match create a new one under the same id
-    surface = renderer.surface.create(x, y, w, h, single_mode)
+    surface = renderer.surface.create(x, y, w, h)
     surface_list[id] = surface
     needs_drawing = true
   elseif surf_x ~= x or surf_y ~= y then
@@ -60,8 +60,8 @@ function View.surface_from_list(surface_list, id, x, y, w, h, single_mode)
 end
 
 
-function View:set_surface_for(name, x, y, w, h, background, single_mode)
-  local surface = View.surface_from_list(self.named_surfaces, name, x, y, w, h, single_mode)
+function View:set_surface_for(name, x, y, w, h, background)
+  local surface = View.surface_from_list(self.named_surfaces, name, x, y, w, h)
   renderer.set_current_surface(surface)
   renderer.begin_frame(surface, background or style.background)
   self:set_surface_to_draw(surface)

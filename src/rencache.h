@@ -22,7 +22,6 @@ typedef struct RenCache {
     RenRect last_clip_rect;
     int rect_count;
     int x_origin, y_origin;
-    bool single_surface_mode;
     bool frame_started;
     bool first_draw;
     bool show_debug;
@@ -30,7 +29,7 @@ typedef struct RenCache {
     RenRect whole_surface_rect[1];
 } RenCache;
 
-void rencache_init(RenCache *cache, int x_origin, int y_origin, bool single_surface_mode);
+void rencache_init(RenCache *cache, int x_origin, int y_origin);
 void rencache_destroy(RenCache* cache);
 void  rencache_show_debug(RenCache* cache, bool enable);
 void  rencache_set_clip_rect(RenCache* cache, RenRect rect);

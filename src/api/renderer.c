@@ -491,7 +491,6 @@ static int f_rensurf_create(lua_State *L) {
     const lua_Number yf = luaL_checknumber(L, 2);
     const lua_Number wf = luaL_checknumber(L, 3);
     const lua_Number hf = luaL_checknumber(L, 4);
-    const bool single_surface_mode = lua_toboolean(L, 5);
 
     const int x = (int) xf, y = (int) yf;
     const int w = round(wf), h = round(hf);
@@ -507,7 +506,7 @@ static int f_rensurf_create(lua_State *L) {
     luaL_getmetatable(L, API_TYPE_RENSURFACE);
     lua_setmetatable(L, -2);
 
-    rensurf_init(rs, renderer, x, y, w, h, scale, single_surface_mode);
+    rensurf_init(rs, renderer, x, y, w, h, scale);
     return 1;
 }
 
