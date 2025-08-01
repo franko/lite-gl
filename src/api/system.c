@@ -245,9 +245,6 @@ top:
       SDL_StopTextInput(window_renderer.window);
       return 1;
 
-
-
-    // (The rest of the function remains the same as in the previous answer...)
     case SDL_EVENT_DROP_FILE:
       SDL_GetMouseState(&mx, &my);
       lua_pushstring(L, "filedropped");
