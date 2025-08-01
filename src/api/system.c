@@ -189,7 +189,6 @@ top:
       lua_pushstring(L, "quit");
       return 1;
 
-    // --- START OF MIGRATED CODE (REVISED) ---
     // The single SDL_WINDOWEVENT case is replaced by individual event cases.
     case SDL_EVENT_WINDOW_RESIZED:
       ren_resize_window(&window_renderer);
@@ -232,18 +231,21 @@ top:
     case SDL_EVENT_WINDOW_MOUSE_LEAVE:
       lua_pushstring(L, "mouseleft");
       return 1;
-
-    case SDL_EVENT_WINDOW_FOCUS_LOST:
-      lua_pushstring(L, "focuslost");
-      return 1;
     
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
       /* on some systems, when alt-tabbing to the window SDL will queue up
       ** several KEYDOWN events for the `tab` key; we flush all keydown
       ** events on focus so these are discarded */
       SDL_FlushEvent(SDL_EVENT_KEY_DOWN);
+      SDL_StartTextInput(window_renderer.window);
       goto top; // Preserving original logic to poll for the next event
-    // --- END OF MIGRATED CODE (REVISED) ---
+
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+      lua_pushstring(L, "focuslost");
+      SDL_StopTextInput(window_renderer.window);
+      return 1;
+
+
 
     // (The rest of the function remains the same as in the previous answer...)
     case SDL_EVENT_DROP_FILE:
@@ -274,6 +276,7 @@ top:
       lua_pushstring(L, e.edit.text);
       lua_pushinteger(L, e.edit.start);
       lua_pushinteger(L, e.edit.length);
+      SDL_free((void *) e.edit.text);
       return 4;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
