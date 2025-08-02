@@ -1,19 +1,31 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "rensurface.h"
 
-void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, int h, int scale) {
+void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, const SDL_FRect *rect, float scale) {
   /* Note that w and h here should always be in pixels and obtained from
      a call to SDL_GL_GetDrawableSize(). */
   rs->surface = NULL;
   rs->texture = NULL;
-  rencache_init(&rs->rencache, x, y);
+  rs->w = rect->w;
+  rs->h = rect->h;
+  rencache_init(&rs->rencache, rect->x, rect->y);
 
-  if (w > 0 && h > 0) {
-    const int w_scaled = w * scale, h_scaled = h * scale;
-    rs->surface = SDL_CreateSurface(w_scaled, h_scaled,
-                                    SDL_PIXELFORMAT_BGRA32);
-    rs->texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGRA32, SDL_TEXTUREACCESS_STATIC, w_scaled, h_scaled);
+  /* These below are the coordinates at which the SDL_Surface/Texture is going
+   * to be effectively rendered. We want to be pixel exact about that.
+   * The rounding in the function renwin_render_surface must be done in the
+   * same way. */
+  /* Now we are creating an SDL_Surface and texture whose size must be an *integer* number
+   * of pixels. There we get the rounding so that the equality:
+   * rs->w * rs->scale == rs->surface->w
+   * May no longer hold exactly. For example:
+   * scale = 1.25, rs->w = 10.0, surface->w = 13 */
+  const SDL_Rect r_scaled = ren_scaled_rect(rect, scale);
+
+  if (r_scaled.w > 0 && r_scaled.h > 0) {
+    rs->surface = SDL_CreateSurface(r_scaled.w, r_scaled.h, SDL_PIXELFORMAT_BGRA32);
+    rs->texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGRA32, SDL_TEXTUREACCESS_STATIC, r_scaled.w, r_scaled.h);
     if (!rs->surface || !rs->texture) {
       fprintf(stderr, "Error creating surface or texture: %s", SDL_GetError());
       exit(1);
@@ -23,14 +35,12 @@ void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, i
 }
 
 
-void rensurf_update_rect(RenSurface *rs, const RenRect *r) {
+void rensurf_update_rect(RenSurface *rs, const SDL_FRect *r) {
   if (!rs->surface) return;
   const float scale = rs->scale;
-  const int x = scale * r->x, y = scale * r->y;
-  const int w = scale * r->width, h = scale * r->height;
-  const SDL_Rect sr = {.x = x, .y = y, .w = w, .h = h};
-  int32_t *pixels = ((int32_t *) rs->surface->pixels) + x + rs->surface->w * y;
-  SDL_UpdateTexture(rs->texture, &sr, pixels, rs->surface->w * 4);
+  SDL_Rect r_scaled = ren_scaled_rect(r, scale);
+  int32_t *pixels = ((int32_t *) rs->surface->pixels) + r_scaled.x + rs->surface->w * r_scaled.y;
+  SDL_UpdateTexture(rs->texture, &r_scaled, pixels, rs->surface->pitch);
 }
 
 void rensurf_free(RenSurface *rs) {
@@ -40,15 +50,17 @@ void rensurf_free(RenSurface *rs) {
   }
 }
 
-void rensurf_get_rect(RenSurface *rs, int *x, int *y, int *w, int *h) {
-  *x = rs->rencache.x_origin;
-  *y = rs->rencache.y_origin;
-  *w = (rs->surface ? rs->surface->w : 0) / rs->scale;
-  *h = (rs->surface ? rs->surface->h : 0) / rs->scale;
+SDL_FRect rensurf_get_rect(RenSurface *rs) {
+  return (SDL_FRect){
+    rs->rencache.x_origin,
+    rs->rencache.y_origin,
+    (rs->surface ? rs->w : 0),
+    (rs->surface ? rs->h : 0)
+  };
 }
 
-void rensurf_get_size(RenSurface *rs, int *w, int *h) {
-  *w = (rs->surface ? rs->surface->w : 0) / rs->scale;
-  *h = (rs->surface ? rs->surface->h : 0) / rs->scale;
+void rensurf_get_size(RenSurface *rs, float *w, float *h) {
+  *w = (rs->surface ? rs->w : 0);
+  *h = (rs->surface ? rs->h : 0);
 }
 

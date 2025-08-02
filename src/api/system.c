@@ -277,20 +277,26 @@ top:
       return 4;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
-      if (e.button.button == 1) { SDL_CaptureMouse(true); }
-      lua_pushstring(L, "mousepressed");
-      lua_pushstring(L, button_name(e.button.button));
-      lua_pushinteger(L, e.button.x);
-      lua_pushinteger(L, e.button.y);
-      lua_pushinteger(L, e.button.clicks);
+      {
+        const float scale = renwin_events_scale_factor(&window_renderer);
+        if (e.button.button == 1) { SDL_CaptureMouse(true); }
+        lua_pushstring(L, "mousepressed");
+        lua_pushstring(L, button_name(e.button.button));
+        lua_pushinteger(L, e.button.x / scale);
+        lua_pushinteger(L, e.button.y / scale);
+        lua_pushinteger(L, e.button.clicks);
+      }
       return 5;
 
     case SDL_EVENT_MOUSE_BUTTON_UP:
-      if (e.button.button == 1) { SDL_CaptureMouse(false); }
-      lua_pushstring(L, "mousereleased");
-      lua_pushstring(L, button_name(e.button.button));
-      lua_pushinteger(L, e.button.x);
-      lua_pushinteger(L, e.button.y);
+      {
+        const float scale = renwin_events_scale_factor(&window_renderer);
+        if (e.button.button == 1) { SDL_CaptureMouse(false); }
+        lua_pushstring(L, "mousereleased");
+        lua_pushstring(L, button_name(e.button.button));
+        lua_pushinteger(L, e.button.x / scale);
+        lua_pushinteger(L, e.button.y / scale);
+      }
       return 4;
 
     case SDL_EVENT_MOUSE_MOTION:
@@ -301,11 +307,14 @@ top:
         e.motion.xrel += event_plus.motion.xrel;
         e.motion.yrel += event_plus.motion.yrel;
       }
-      lua_pushstring(L, "mousemoved");
-      lua_pushinteger(L, e.motion.x);
-      lua_pushinteger(L, e.motion.y);
-      lua_pushinteger(L, e.motion.xrel);
-      lua_pushinteger(L, e.motion.yrel);
+      {
+        const float scale = renwin_events_scale_factor(&window_renderer);
+        lua_pushstring(L, "mousemoved");
+        lua_pushinteger(L, e.motion.x / scale);
+        lua_pushinteger(L, e.motion.y / scale);
+        lua_pushinteger(L, e.motion.xrel / scale);
+        lua_pushinteger(L, e.motion.yrel / scale);
+      }
       return 5;
 
     case SDL_EVENT_MOUSE_WHEEL:
@@ -443,24 +452,26 @@ static int f_set_window_hit_test(lua_State *L) {
 
 
 static int f_get_window_size(lua_State *L) {
+  const float scale = renwin_events_scale_factor(&window_renderer);
   int x, y, w, h;
   SDL_GetWindowSize(window_renderer.window, &w, &h);
   SDL_GetWindowPosition(window_renderer.window, &x, &y);
-  lua_pushinteger(L, w);
-  lua_pushinteger(L, h);
-  lua_pushinteger(L, x);
-  lua_pushinteger(L, y);
+  lua_pushinteger(L, w / scale);
+  lua_pushinteger(L, h / scale);
+  lua_pushinteger(L, x / scale);
+  lua_pushinteger(L, y / scale);
   return 4;
 }
 
 
 static int f_set_window_size(lua_State *L) {
+  const float scale = renwin_events_scale_factor(&window_renderer);
   double w = luaL_checknumber(L, 1);
   double h = luaL_checknumber(L, 2);
   double x = luaL_checknumber(L, 3);
   double y = luaL_checknumber(L, 4);
-  SDL_SetWindowSize(window_renderer.window, w, h);
-  SDL_SetWindowPosition(window_renderer.window, x, y);
+  SDL_SetWindowSize(window_renderer.window, w * scale, h * scale);
+  SDL_SetWindowPosition(window_renderer.window, x * scale, y * scale);
   ren_resize_window(&window_renderer);
   return 0;
 }

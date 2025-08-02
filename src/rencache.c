@@ -34,17 +34,17 @@ enum CommandType { SET_CLIP, DRAW_TEXT, DRAW_RECT };
 typedef struct {
   enum CommandType type;
   uint32_t size;
-  /* Commands *must* always begin with a RenRect
+  /* Commands *must* always begin with a SDL_FRect
   ** This is done to ensure alignment */
-  RenRect command[];
+  SDL_FRect command[];
 } Command;
 
 typedef struct {
-  RenRect rect;
+  SDL_FRect rect;
 } SetClipCommand;
 
 typedef struct {
-  RenRect rect;
+  SDL_FRect rect;
   RenColor color;
   RenFont *fonts[FONT_FALLBACK_MAX];
   float text_x;
@@ -54,22 +54,22 @@ typedef struct {
 } DrawTextCommand;
 
 typedef struct {
-  RenRect rect;
+  SDL_FRect rect;
   RenColor color;
 } DrawRectCommand;
 
 /* 32bit fnv-1a hash */
 #define HASH_INITIAL 2166136261
 
-void rencache_init(RenCache *cache, int x, int y) {
+void rencache_init(RenCache *cache, float x, float y) {
   cache->command_buf_size = 0;
   cache->command_buf = NULL;
   cache->resize_issue = false;
   cache->command_buf_idx = 0;
   cache->current_hash = HASH_INITIAL;
   cache->previous_hash = HASH_INITIAL - 1; // Ensure first frame always draws
-  cache->surface_rect = (RenRect){0};
-  cache->last_clip_rect = (RenRect){0};
+  cache->surface_rect = (SDL_FRect){0};
+  cache->last_clip_rect = (SDL_FRect){0};
   cache->x_origin = x;
   cache->y_origin = y;
   cache->show_debug = false;
@@ -81,10 +81,10 @@ void rencache_destroy(RenCache* cache) {
   free(cache->command_buf);
 }
 
-static inline int rencache_min(int a, int b) { return a < b ? a : b; }
-static inline int rencache_max(int a, int b) { return a > b ? a : b; }
+static inline float rencache_min(float a, float b) { return a < b ? a : b; }
+static inline float rencache_max(float a, float b) { return a > b ? a : b; }
 
-static inline void rect_set_from_origin(RenCache *cache, RenRect *r) {
+static inline void rect_set_from_origin(RenCache *cache, SDL_FRect *r) {
   r->x = r->x - cache->x_origin;
   r->y = r->y - cache->y_origin;
 }
@@ -97,18 +97,18 @@ static void hash(unsigned *h, const void *data, int size) {
 }
 
 
-static inline bool rects_overlap(RenRect a, RenRect b) {
-  return b.x + b.width  >= a.x && b.x <= a.x + a.width
-      && b.y + b.height >= a.y && b.y <= a.y + a.height;
+static inline bool rects_overlap(const SDL_FRect *a, const SDL_FRect *b) {
+  return b->x + b->w >= a->x && b->x <= a->x + a->w
+      && b->y + b->h >= a->y && b->y <= a->y + a->h;
 }
 
 
-static RenRect intersect_rects(RenRect a, RenRect b) {
-  int x1 = rencache_max(a.x, b.x);
-  int y1 = rencache_max(a.y, b.y);
-  int x2 = rencache_min(a.x + a.width, b.x + b.width);
-  int y2 = rencache_min(a.y + a.height, b.y + b.height);
-  return (RenRect) { x1, y1, rencache_max(0, x2 - x1), rencache_max(0, y2 - y1) };
+static SDL_FRect intersect_rects(const SDL_FRect *a, const SDL_FRect *b) {
+  int x1 = rencache_max(a->x, b->x);
+  int y1 = rencache_max(a->y, b->y);
+  int x2 = rencache_min(a->x + a->w, b->x + b->w);
+  int y2 = rencache_min(a->y + a->h, b->y + b->h);
+  return (SDL_FRect) { x1, y1, rencache_max(0, x2 - x1), rencache_max(0, y2 - y1) };
 }
 
 
@@ -168,19 +168,21 @@ void rencache_show_debug(RenCache* cache, bool enable) {
 }
 
 
-void rencache_set_clip_rect(RenCache* cache, RenRect rect) {
+void rencache_set_clip_rect(RenCache* cache, const SDL_FRect *rect_) {
+  SDL_FRect rect = *rect_;
   rect_set_from_origin(cache, &rect);
   SetClipCommand *cmd = push_command(cache, SET_CLIP, sizeof(SetClipCommand));
   if (cmd) {
-    cmd->rect = intersect_rects(rect, cache->surface_rect);
+    cmd->rect = intersect_rects(&rect, &cache->surface_rect);
     cache->last_clip_rect = cmd->rect;
   }
 }
 
 
-void rencache_draw_rect(RenCache* cache, RenRect rect, RenColor color) {
+void rencache_draw_rect(RenCache* cache, const SDL_FRect *rect_, RenColor color) {
+  SDL_FRect rect = *rect_;
   rect_set_from_origin(cache, &rect);
-  if (rect.width == 0 || rect.height == 0 || !rects_overlap(cache->last_clip_rect, rect)) {
+  if (rect.w == 0 || rect.h == 0 || !rects_overlap(&cache->last_clip_rect, &rect)) {
     return;
   }
   DrawRectCommand *cmd = push_command(cache, DRAW_RECT, sizeof(DrawRectCommand));
@@ -194,9 +196,9 @@ double rencache_draw_text(RenCache* cache, RenFont **fonts, const char *text, si
 {
   int x_offset;
   double width = ren_font_group_get_width(fonts, text, len, &x_offset);
-  RenRect rect = { x + x_offset, y, (int)(width - x_offset), ren_font_group_get_height(fonts) };
+  SDL_FRect rect = { x + x_offset, y, (float)(width - x_offset), (float)ren_font_group_get_height(fonts) };
   rect_set_from_origin(cache, &rect);
-  if (rects_overlap(cache->last_clip_rect, rect)) {
+  if (rects_overlap(&cache->last_clip_rect, &rect)) {
     int sz = len + 1;
     DrawTextCommand *cmd = push_command(cache, DRAW_TEXT, sizeof(DrawTextCommand) + sz);
     if (cmd) {
@@ -215,13 +217,13 @@ double rencache_draw_text(RenCache* cache, RenFont **fonts, const char *text, si
 
 void rencache_begin_frame(RenCache* cache, RenSurface* rs) {
   /* reset state if the screen width/height has changed */
-  int w, h;
+  float w, h;
   rensurf_get_size(rs, &w, &h);
   cache->resize_issue = false;
 
-  if (cache->surface_rect.width != w || h != cache->surface_rect.height) {
-    cache->surface_rect.width = w;
-    cache->surface_rect.height = h;
+  if (cache->surface_rect.w != w || h != cache->surface_rect.h) {
+    cache->surface_rect.w = w;
+    cache->surface_rect.h = h;
     cache->first_draw = true;
     cache->previous_hash = HASH_INITIAL - 1; // Force redraw on resize
   }
@@ -236,12 +238,12 @@ void rencache_begin_frame(RenCache* cache, RenSurface* rs) {
 void rencache_end_frame(RenCache* cache, RenSurface *rs) {
   /* 1. Calculate a single hash for the entire frame's commands */
   Command *cmd = NULL;
-  RenRect cr = cache->surface_rect;
+  SDL_FRect cr = cache->surface_rect;
   while (next_command(cache, &cmd)) {
     // We still need to respect clip rects for the hash calculation
     if (cmd->type == SET_CLIP) { cr = cmd->command[0]; }
-    RenRect r = intersect_rects(cmd->command[0], cr);
-    if (r.width == 0 || r.height == 0) { continue; }
+    SDL_FRect r = intersect_rects(cmd->command, &cr);
+    if (r.w == 0 || r.h == 0) { continue; }
 
     hash(&cache->current_hash, cmd, cmd->size);
   }
@@ -253,19 +255,21 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
   }
 
   /* 3. Hashes differ (or first frame), so redraw the entire screen. */
-  ren_set_clip_rect(rs, cache->surface_rect);
+  ren_set_clip_rect(rs, &cache->surface_rect);
 
   cmd = NULL;
   while (next_command(cache, &cmd)) {
     SetClipCommand *ccmd = (SetClipCommand*)&cmd->command;
     DrawRectCommand *rcmd = (DrawRectCommand*)&cmd->command;
     DrawTextCommand *tcmd = (DrawTextCommand*)&cmd->command;
+    SDL_FRect rect_int;
     switch (cmd->type) {
       case SET_CLIP:
-        ren_set_clip_rect(rs, intersect_rects(ccmd->rect, cache->surface_rect));
+        rect_int = intersect_rects(&ccmd->rect, &cache->surface_rect);
+        ren_set_clip_rect(rs, &rect_int);
         break;
       case DRAW_RECT:
-        ren_draw_rect(rs, rcmd->rect, rcmd->color);
+        ren_draw_rect(rs, &rcmd->rect, rcmd->color);
         break;
       case DRAW_TEXT:
         ren_font_group_set_tab_size(tcmd->fonts, tcmd->tab_size);
@@ -276,7 +280,7 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
 
   if (cache->show_debug) {
     RenColor color = { rand(), rand(), rand(), 50 };
-    ren_draw_rect(rs, cache->surface_rect, color);
+    ren_draw_rect(rs, &cache->surface_rect, color);
   }
 
   /* 4. Mark the entire window surface for update */

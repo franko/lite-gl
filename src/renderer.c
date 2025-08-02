@@ -38,10 +38,6 @@ static void* check_alloc(void *ptr) {
   return ptr;
 }
 
-static RenRect scaled_rect(const RenRect rect, const int scale) {
-  return (RenRect) {rect.x * scale, rect.y * scale, rect.width * scale, rect.height * scale};
-}
-
 /************************* Fonts *************************/
 
 typedef struct {
@@ -273,7 +269,7 @@ RenFont* ren_font_load(RenWindow *window_renderer, const char* path, float size,
   if (FT_Open_Face(library, &(FT_Open_Args){ .flags = FT_OPEN_STREAM, .stream = &font->stream }, 0, &face))
     goto failure;
 
-  const int surface_scale = window_renderer->scale;
+  const float surface_scale = window_renderer->scale;
   const float scaled_size = roundf(size * surface_scale);
   if (FT_Set_Pixel_Sizes(face, 0, scaled_size))
     goto failure;
@@ -324,13 +320,13 @@ const char* ren_font_get_path(RenFont *font) {
   return font->path;
 }
 
-int ren_font_get_scale(RenFont *font) {
+float ren_font_get_scale(RenFont *font) {
   /* Normally we may extract two scaling factor along x and y axis but,
      given the way we create fonts they should be always the same so we
      just look at the size along y. */
   int scaled_size_y = font->face->size->metrics.y_ppem;
   float surface_scale_y = (float)scaled_size_y / font->size;
-  return (int) roundf(surface_scale_y);
+  return surface_scale_y;
 }
 
 void ren_font_free(RenFont* font) {
@@ -361,11 +357,11 @@ float ren_font_group_get_size(RenFont **fonts) {
 }
 
 void ren_font_group_set_size(RenWindow *window_renderer, RenFont **fonts, float size) {
-  const int surface_scale = window_renderer->scale;
+  const float surface_scale = window_renderer->scale;
   for (int i = 0; i < FONT_FALLBACK_MAX && fonts[i]; ++i) {
     font_clear_glyph_cache(fonts[i]);
     FT_Face face = fonts[i]->face;
-    FT_Set_Pixel_Sizes(face, 0, (int)(size*surface_scale));
+    FT_Set_Pixel_Sizes(face, 0, lroundf(size*surface_scale));
     fonts[i]->size = size;
     fonts[i]->height = (short)((face->height / (float)face->units_per_EM) * size);
     fonts[i]->baseline = (short)((face->ascender / (float)face->units_per_EM) * size);
@@ -384,7 +380,7 @@ double ren_font_group_get_width(RenFont **fonts, const char *text, size_t len, i
   const char* end = text + len;
   GlyphMetric* metric = NULL; GlyphSet* set = NULL;
   bool set_x_offset = x_offset == NULL;
-  int surface_scale = -1;
+  float surface_scale = -1;
   while (text < end) {
     unsigned int codepoint;
     text = utf8_to_codepoint(text, &codepoint);
@@ -415,7 +411,7 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
   SDL_GetSurfaceClipRect(surface, &clip);
 
   const SDL_PixelFormatDetails *pixel_format = SDL_GetPixelFormatDetails(surface->format);
-  const int surface_scale = rs->scale;
+  const float surface_scale = rs->scale;
   double pen_x = x * surface_scale;
   y *= surface_scale;
   const int bytes_per_pixel = pixel_format->bytes_per_pixel;
@@ -439,7 +435,7 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
     int end_x = (metric->x1 - metric->x0) + start_x;
     int glyph_end = metric->x1, glyph_start = metric->x0;
     if (!metric->loaded && codepoint > 0xFF)
-      ren_draw_rect(rs, (RenRect){ start_x + 1, y, font->space_advance - 1, ren_font_group_get_height(fonts) }, color);
+      ren_draw_rect(rs, &(SDL_FRect){ start_x + 1, y, font->space_advance - 1, ren_font_group_get_height(fonts) }, color);
     if (set->surface && color.a > 0 && end_x >= clip.x && start_x < clip_end_x) {
       uint8_t* source_pixels = set->surface->pixels;
       for (int line = metric->y0; line < metric->y1; ++line) {
@@ -490,9 +486,9 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
     else if(font != last || text == end) {
       double local_pen_x = text == end ? pen_x + adv : pen_x;
       if (underline)
-        ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height - 1, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+        ren_draw_rect(rs, &(SDL_FRect){last_pen_x, y / surface_scale + last->height - 1, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
       if (strikethrough)
-        ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height / 2, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+        ren_draw_rect(rs, &(SDL_FRect){last_pen_x, y / surface_scale + last->height / 2, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
       last = font;
       last_pen_x = pen_x;
     }
@@ -503,15 +499,12 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
 }
 
 /******************* Rectangles **********************/
-void ren_draw_rect(RenSurface *rs, RenRect rect, RenColor color) {
+void ren_draw_rect(RenSurface *rs, const SDL_FRect *rect, RenColor color) {
   SDL_Surface *surface = rs->surface;
   if (color.a == 0 || !surface) { return; }
-  const int surface_scale = rs->scale;
+  const float surface_scale = rs->scale;
 
-  SDL_Rect dest_rect = { rect.x * surface_scale,
-                         rect.y * surface_scale,
-                         rect.width * surface_scale,
-                         rect.height * surface_scale };
+  SDL_Rect dest_rect = ren_scaled_rect(rect, surface_scale);
 
   const SDL_PixelFormatDetails *pixel_format = SDL_GetPixelFormatDetails(surface->format);
   if (color.a == 0xff) {
@@ -557,9 +550,15 @@ void ren_resize_window(RenWindow *window_renderer) {
 }
 
 
-void ren_set_clip_rect(RenSurface *rs, RenRect rect) {
+void ren_set_clip_rect(RenSurface *rs, const SDL_FRect *rect) {
   if (!rs->surface) return;
-  RenRect sr = scaled_rect(rect, rs->scale);
-  SDL_SetSurfaceClipRect(rs->surface, &(SDL_Rect){.x = sr.x, .y = sr.y, .w = sr.width, .h = sr.height});
+  SDL_Rect sr = ren_scaled_rect(rect, rs->scale);
+  SDL_SetSurfaceClipRect(rs->surface, &sr);
+}
+
+SDL_Rect ren_scaled_rect(const SDL_FRect *rect, const float scale) {
+  const int x = lroundf(rect->x * scale), y = lroundf(rect->y * scale);
+  const int w = lroundf((rect->x + rect->w) * scale) - x, h = lroundf((rect->y + rect->h) * scale) - y;
+  return (SDL_Rect){ x, y, w, h };
 }
 
