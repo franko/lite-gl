@@ -280,7 +280,7 @@ void rencache_end_frame(RenCache* cache, RenSurface *rs) {
   }
 
   /* 4. Mark the entire window surface for update */
-  rensurf_update_rects(rs, &cache->surface_rect, 1);
+  rensurf_update_rect(rs, &cache->surface_rect);
 
   /* 5. Store hash for next frame and update state */
   cache->previous_hash = cache->current_hash;
