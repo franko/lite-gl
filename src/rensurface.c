@@ -23,17 +23,14 @@ void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, i
 }
 
 
-void rensurf_update_rects(RenSurface *rs, RenRect *rects, int count) {
+void rensurf_update_rect(RenSurface *rs, const RenRect *r) {
   if (!rs->surface) return;
-  const int scale = rs->scale;
-  for (int i = 0; i < count; i++) {
-    const RenRect *r = &rects[i];
-    const int x = scale * r->x, y = scale * r->y;
-    const int w = scale * r->width, h = scale * r->height;
-    const SDL_Rect sr = {.x = x, .y = y, .w = w, .h = h};
-    int32_t *pixels = ((int32_t *) rs->surface->pixels) + x + rs->surface->w * y;
-    SDL_UpdateTexture(rs->texture, &sr, pixels, rs->surface->w * 4);
-  }
+  const float scale = rs->scale;
+  const int x = scale * r->x, y = scale * r->y;
+  const int w = scale * r->width, h = scale * r->height;
+  const SDL_Rect sr = {.x = x, .y = y, .w = w, .h = h};
+  int32_t *pixels = ((int32_t *) rs->surface->pixels) + x + rs->surface->w * y;
+  SDL_UpdateTexture(rs->texture, &sr, pixels, rs->surface->w * 4);
 }
 
 void rensurf_free(RenSurface *rs) {
