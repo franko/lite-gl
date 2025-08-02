@@ -9,14 +9,20 @@ struct RenSurface {
   SDL_Surface *surface;
   SDL_Texture *texture;
   RenCache rencache;
-  int scale;
+  float w, h; // logical width and height in points
+  float scale;
 };
 
-extern void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, int h, int scale);
-extern void rensurf_update_rect(RenSurface *rs, const RenRect *rect);
+extern void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, const SDL_FRect *rect, float scale);
+extern void rensurf_update_rect(RenSurface *rs, const SDL_FRect *rect);
 extern void rensurf_free(RenSurface *rs);
-extern void rensurf_get_rect(RenSurface *rs, int *x, int *y, int *w, int *h);
-extern void rensurf_get_size(RenSurface *rs, int *w, int *h);
+extern SDL_FRect rensurf_get_rect(RenSurface *rs);
+extern void rensurf_get_size(RenSurface *rs, float *w, float *h);
+
+static inline void rensurf_get_pixels_size(RenSurface *rs, int *w, int *h) {
+  *w = (rs->surface ? rs->surface->w : 0);
+  *h = (rs->surface ? rs->surface->h : 0);
+}
 
 #endif
 
