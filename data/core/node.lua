@@ -397,12 +397,22 @@ function Node.copy_position_and_size(dst, src)
   dst.size.x, dst.size.y = src.size.x, src.size.y
 end
 
+local function scale_round(x, scale)
+  return math.floor(x * scale + 0.5) / scale
+end
 
 -- calculating the sizes is the same for hsplits and vsplits, except the x/y
 -- axis are swapped; this function lets us use the same code for both
-local function calc_split_sizes(self, x, y, x1, x2, y1, y2)
-  local ds = ((x1 and x1 < 1) or (x2 and x2 < 1)) and 0 or style.divider_size
-  local n = x1 and x1 + ds or (x2 and self.size[x] - x2 or math.floor(self.size[x] * self.divider))
+local function calc_split_sizes(self, x, y, x1, x2)
+  local scale = renderer.get_scale()
+  x1 = x1 and scale_round(x1, scale)
+  x2 = x2 and scale_round(x2, scale)
+  local ds = scale_round(((x1 and x1 < 1) or (x2 and x2 < 1)) and 0 or style.divider_size, scale)
+  local n = scale_round(x1 and x1 + ds or (x2 and self.size[x] - x2 or self.size[x] * self.divider), scale)
+  if false and x == "x" then
+    print("DEBUG: x1 x2", x1, x2)
+    print(string.format("DEBUG: pos %.4g %.4g, size: %.4g %.4g, n/ds: %.4g %.4g", self.position[x] * scale, self.position[y] * scale, self.size[x] * scale, self.size[y] * scale, n * scale, ds * scale))
+  end
   self.a.position[x] = self.position[x]
   self.a.position[y] = self.position[y]
   self.a.size[x] = n - ds

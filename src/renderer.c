@@ -556,9 +556,14 @@ void ren_set_clip_rect(RenSurface *rs, const SDL_FRect *rect) {
   SDL_SetSurfaceClipRect(rs->surface, &sr);
 }
 
+#if 0
 SDL_Rect ren_scaled_rect(const SDL_FRect *rect, const float scale) {
   const int x = lroundf(rect->x * scale), y = lroundf(rect->y * scale);
   const int w = lroundf((rect->x + rect->w) * scale) - x, h = lroundf((rect->y + rect->h) * scale) - y;
   return (SDL_Rect){ x, y, w, h };
 }
-
+#else
+SDL_Rect ren_scaled_rect(const SDL_FRect *rect, const float scale) {
+  return (SDL_Rect){ lroundf(rect->x * scale), lroundf(rect->y * scale), lroundf(rect->w * scale), lroundf(rect->h * scale) };
+}
+#endif
