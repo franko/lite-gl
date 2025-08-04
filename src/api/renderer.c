@@ -307,6 +307,12 @@ static int f_show_debug(lua_State *L) {
 }
 
 
+static int f_get_scale(lua_State *L) {
+  lua_pushnumber(L, renwin_events_scale_factor(&window_renderer));
+  return 1;
+}
+
+
 static int f_get_size(lua_State *L) {
   const float scale = renwin_events_scale_factor(&window_renderer);
   int w, h;
@@ -449,6 +455,7 @@ static int f_set_render_clip_rect(lua_State *L) {
 static const luaL_Reg lib[] = {
   { "show_debug",           f_show_debug           },
   { "get_size",             f_get_size             },
+  { "get_scale",            f_get_scale            },
   { "begin_frame",          f_begin_frame          },
   { "clear_font_refs",      f_clear_font_refs      },
   { "set_clip_rect",        f_set_clip_rect        },
