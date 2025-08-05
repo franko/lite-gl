@@ -547,6 +547,6 @@ void ren_resize_window(RenWindow *window_renderer) {
 
 void ren_set_clip_rect(RenSurface *rs, RenRect rect) {
   if (!rs->surface) return;
-  SDL_SetSurfaceClipRect(rs->surface, &rect);
+  SDL_SetSurfaceClipRect(rs->surface, &(SDL_Rect) { rect.x, rect.y, rect.width, rect.height });
 }
 

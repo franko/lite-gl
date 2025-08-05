@@ -252,8 +252,8 @@ end
 
 
 function View:get_content_offset()
-  local x = common.round(self.position.x - self.scroll.x)
-  local y = common.round(self.position.y - self.scroll.y)
+  local x = common.round_with_scale(self.position.x - self.scroll.x)
+  local y = common.round_with_scale(self.position.y - self.scroll.y)
   return x, y
 end
 

@@ -51,11 +51,26 @@ function common.merge(a, b)
 end
 
 
----Returns the value of a number rounded to the nearest integer.
----@param n number
----@return number
 function common.round(n)
   return n >= 0 and math.floor(n + 0.5) or math.ceil(n - 0.5)
+end
+
+
+function common.round_with_scale(n)
+  local scale = renderer.get_scale()
+  return math.floor(n * scale + 0.5) / scale
+end
+
+
+function common.floor_with_scale(n)
+  local scale = renderer.get_scale()
+  return math.floor(n * scale) / scale
+end
+
+
+function common.ceil_with_scale(n)
+  local scale = renderer.get_scale()
+  return math.ceil(n * scale) / scale
 end
 
 
@@ -340,7 +355,7 @@ function common.draw_text(font, color, text, align, x,y,w,h)
   elseif align == "right" then
     x = x + (w - tw)
   end
-  y = common.round(y + (h - th) / 2)
+  y = common.round_with_scale(y + (h - th) / 2, renderer.get_scale())
   return renderer.draw_text(font, text, x, y, color), y + th
 end
 

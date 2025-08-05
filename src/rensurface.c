@@ -23,7 +23,7 @@ void rensurf_init(RenSurface *rs, SDL_Renderer *renderer, int x, int y, int w, i
 void rensurf_update_rect(RenSurface *rs, const RenRect *r) {
   if (!rs->surface) return;
   int32_t *pixels = ((int32_t *) rs->surface->pixels) + r->x + rs->surface->w * r->y;
-  SDL_UpdateTexture(rs->texture, r, pixels, rs->surface->w * 4);
+  SDL_UpdateTexture(rs->texture, &(SDL_Rect){ r->x, r->y, r->width, r->height }, pixels, rs->surface->w * 4);
 }
 
 void rensurf_free(RenSurface *rs) {

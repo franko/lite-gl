@@ -199,7 +199,7 @@ function LogView:draw()
       w = w - (x - self:get_content_offset())
 
       if is_expanded(item) then
-        y = y + common.round(style.padding.y / 2)
+        y = y + common.round_with_scale(style.padding.y / 2)
         _, y = draw_text_multiline(style.font, item.text, x, y, style.text)
 
         local at = "at " .. common.home_encode(item.at)

@@ -168,7 +168,7 @@ function TiledView:draw_justified_text(font, color, text, align, x, y, w, h)
   elseif align == "right" then
     x = x + (w - tw)
   end
-  y = y + common.round((h - th) / 2)
+  y = y + common.round_with_scale((h - th) / 2)
   return self:draw_text(font, text, x, y, color), y + th
 end
 

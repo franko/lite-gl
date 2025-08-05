@@ -32,10 +32,8 @@ void renwin_get_size_pixels(RenWindow *ren, int *w, int *h) {
 void renwin_get_size_window_coord(RenWindow *ren, float *w, float *h) {
   int w_pixels, h_pixels;
   SDL_GetWindowSizeInPixels(ren->window, &w_pixels, &h_pixels);
-  if (ren->soft_scale != 1.0f) {
-    *w = w_pixels / ren->soft_scale;
-    *h = h_pixels / ren->soft_scale;
-  }
+  *w = w_pixels / ren->soft_scale;
+  *h = h_pixels / ren->soft_scale;
 }
 
 
@@ -54,7 +52,7 @@ void renwin_resize_window(RenWindow *ren) {
 void renwin_render_surface(RenWindow *ren, RenSurface *rs, int x, int y) {
   /* Width and height of the surface, in pixels. */
   int w, h;
-  rensurf_get_size_pixels(rs, &w, &h);
+  rensurf_get_size(rs, &w, &h);
   const SDL_FRect dst = { x, y, w, h };
   SDL_RenderTexture(ren->renderer, rs->texture, NULL, &dst);
 }
@@ -79,7 +77,7 @@ void renwin_free(RenWindow *ren) {
   SDL_DestroyRenderer(ren->renderer);
 }
 
-void renwin_render_fill_rect(RenWindow *ren, SDL_Rect *r, SDL_Color color) {
+void renwin_render_fill_rect(RenWindow *ren, SDL_FRect *r, SDL_Color color) {
   SDL_SetRenderDrawColor(ren->renderer, color.r, color.g, color.b, color.a);
   SDL_RenderFillRect(ren->renderer, r);
 }

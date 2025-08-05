@@ -427,7 +427,7 @@ end
 function TerminalView:convert_coordinates(x, y)
   local w = self.options.font:get_width(" ")
   local col_exact = math.floor((x - self.position.x - self.options.padding.x) / w)
-  local col_approx = common.round((x - self.position.x - self.options.padding.x) / w)
+  local col_approx = common.round_with_scale((x - self.position.x - self.options.padding.x) / w)
   local row = math.floor((y - self.position.y - self.options.padding.y) / self.options.font:get_height())
   return math.max(0, col_exact), math.max(0, row), math.max(0, col_approx)
 end

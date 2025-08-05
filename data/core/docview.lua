@@ -43,7 +43,7 @@ end
 
 function DocView:setup_tiles_for_drawing()
   local lh = self:get_line_height()
-  local cw = math.ceil(self:get_font():get_width(' '))
+  local cw = common.ceil_with_scale(self:get_font():get_width(' '))
   local metric = self.tiles_metric
   metric.gutter_width, metric.gutter_padding = self:get_gutter_width()
   metric.line_height = lh
@@ -189,13 +189,13 @@ end
 
 
 function DocView:get_line_height()
-  return math.floor(self:get_font():get_height() * config.line_height)
+  return common.floor_with_scale(self:get_font():get_height() * config.line_height)
 end
 
 
 function DocView:get_gutter_width()
-  local padding = math.floor(style.padding.x * 2 + 0.5)
-  return math.ceil(self:get_font():get_width(#self.doc.lines)) + padding, padding
+  local padding = common.round_with_scale(style.padding.x * 2)
+  return common.ceil_with_scale(self:get_font():get_width(#self.doc.lines)) + padding, padding
 end
 
 
@@ -214,7 +214,7 @@ end
 function DocView:get_line_text_y_offset()
   local lh = self.tiles_metric.line_height
   local th = self:get_font():get_height()
-  return math.floor((lh - th) / 2 + 0.5)
+  return common.round_with_scale((lh - th) / 2)
 end
 
 

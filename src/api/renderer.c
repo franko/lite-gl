@@ -16,8 +16,8 @@ static int CURRENT_SURFACE_REF = LUA_NOREF;
 RenSurface *current_surface = NULL;
 
 static inline RenRect scaled_rect(lua_Number scale, lua_Number x, lua_Number y, lua_Number w, lua_Number h) {
-  int x1 = lfloor(x * scale), y1 = lfloor(y * scale);
-  int x2 = lfloor((x + w) * scale), y2 = lfloor((y + h) * scale);
+  int x1 = lround(x * scale), y1 = lround(y * scale);
+  int x2 = lround((x + w) * scale), y2 = lround((y + h) * scale);
   return (RenRect) {x1, y1, x2 - x1, y2 - y1};
 }
 
@@ -312,12 +312,12 @@ static int f_show_debug(lua_State *L) {
 }
 
 static int f_get_scale(lua_State *L) {
-  lua_pushnumber(L, renwin_events_scale_factor(&window_renderer));
+  lua_pushnumber(L, renwin_global_scale(&window_renderer));
   return 1;
 }
 
 static int f_get_size(lua_State *L) {
-  int w, h;
+  float w, h;
   renwin_get_size_window_coord(&window_renderer, &w, &h);
   lua_pushnumber(L, w);
   lua_pushnumber(L, h);
@@ -344,13 +344,6 @@ static int f_clear_font_refs(lua_State *L) {
   lua_newtable(L);
   lua_rawseti(L, LUA_REGISTRYINDEX, RENDERER_FONT_REF);
   return 0;
-}
-
-
-static RenRect rect_to_grid(lua_Number x, lua_Number y, lua_Number w, lua_Number h) {
-  int x1 = (int) (x + 0.5), y1 = (int) (y + 0.5);
-  int x2 = (int) (x + w + 0.5), y2 = (int) (y + h + 0.5);
-  return (RenRect) {x1, y1, x2 - x1, y2 - y1};
 }
 
 static int f_set_clip_rect(lua_State *L) {
@@ -410,7 +403,7 @@ static int f_draw_text(lua_State *L) {
   lua_Number y = luaL_checknumber(L, 4);
   RenColor color = checkcolor(L, 5, 255);
   const lua_Number scale = renwin_global_scale(&window_renderer);
-  x = rencache_draw_text(&rs->rencache, fonts, text, len, x * scale, lfloor(y * scale), color);
+  x = rencache_draw_text(&rs->rencache, fonts, text, len, x * scale, lround(y * scale), color);
   lua_pushnumber(L, x);
   return 1;
 }
@@ -447,9 +440,9 @@ static int f_render_fill_rect(lua_State *L) {
   RenColor color = checkcolor(L, 5, 255);
 
   const lua_Number scale = renwin_global_scale(&window_renderer);
-  SDL_Rect rect = scaled_rect(scale, x, y, w, h);
+  RenRect rect = scaled_rect(scale, x, y, w, h);
   SDL_Color sdl_color = {color.r, color.g, color.b, color.a};
-  renwin_render_fill_rect(&window_renderer, &rect, sdl_color);
+  renwin_render_fill_rect(&window_renderer, &(SDL_FRect){ rect.x, rect.y, rect.width, rect.height }, sdl_color);
 
   return 0;
 }
@@ -482,6 +475,7 @@ static const luaL_Reg lib[] = {
   { "present_window",       f_present_window       },
   { "render_fill_rect",     f_render_fill_rect     },
   { "set_current_surface",  f_set_current_surface  },
+  { "get_scale",            f_get_scale            },
   { NULL, NULL }
 };
 
@@ -510,14 +504,14 @@ static int f_rensurf_create(lua_State *L) {
         return luaL_error(L, "Renderer is not initialized");
     }
     const lua_Number scale = renwin_global_scale(&window_renderer);
-    RenRect r = scaled_rect(scale, xf, yf, wh, hf);
+    RenRect r = scaled_rect(scale, xf, yf, wf, hf);
 
     RenSurface *rs = (RenSurface*)lua_newuserdata(L, sizeof(RenSurface));
 
     luaL_getmetatable(L, API_TYPE_RENSURFACE);
     lua_setmetatable(L, -2);
 
-    rensurf_init(rs, renderer, r.x, r.y, r.w, r.h);
+    rensurf_init(rs, renderer, r.x, r.y, r.width, r.height);
     return 1;
 }
 

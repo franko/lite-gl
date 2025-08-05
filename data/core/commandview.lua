@@ -252,7 +252,7 @@ end
 
 
 function CommandView:get_line_height()
-  return math.floor(self:get_font():get_height() * 1.2)
+  return common.floor_with_scale(self:get_font():get_height() * 1.2)
 end
 
 
@@ -354,7 +354,7 @@ local function draw_suggestions_box(self)
   local lh = self:get_suggestion_line_height()
   local dh = style.divider_size
   local x, _ = self:get_line_screen_position()
-  local h = math.ceil(self.suggestions_height)
+  local h = common.ceil_with_scale(self.suggestions_height)
   local rx, ry, rw, rh = self.position.x, self.position.y - h - dh, self.size.x, h
 
   core.push_clip_rect(rx, ry, rw, rh)

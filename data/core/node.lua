@@ -263,8 +263,9 @@ function Node:get_tab_overlapping_point(px, py)
   local tabs_number = self:get_visible_tabs_number()
   local x1, y1, w, h = self:get_tab_rect(self.tab_offset)
   local x2, y2 = self:get_tab_rect(self.tab_offset + tabs_number)
+  local scale = renderer.get_scale()
   if px >= x1 and py >= y1 and px < x2 and py < y1 + h then
-    return math.floor((px - x1) / w) + self.tab_offset
+    return scale_floor((px - x1) / w, scale) + self.tab_offset
   end
 end
 
@@ -397,12 +398,22 @@ function Node.copy_position_and_size(dst, src)
   dst.size.x, dst.size.y = src.size.x, src.size.y
 end
 
+local function scale_round(x, scale)
+  return math.floor(x * scale + 0.5) / scale
+end
+
+local function scale_floor(x, scale)
+  return math.floor(x * scale) / scale
+end
 
 -- calculating the sizes is the same for hsplits and vsplits, except the x/y
 -- axis are swapped; this function lets us use the same code for both
-local function calc_split_sizes(self, x, y, x1, x2, y1, y2)
-  local ds = ((x1 and x1 < 1) or (x2 and x2 < 1)) and 0 or style.divider_size
-  local n = x1 and x1 + ds or (x2 and self.size[x] - x2 or math.floor(self.size[x] * self.divider))
+local function calc_split_sizes(self, x, y, x1, x2)
+  local scale = renderer.get_scale()
+  x1 = x1 and scale_round(x1, scale)
+  x2 = x2 and scale_round(x2, scale)
+  local ds = scale_round(((x1 and x1 < 1) or (x2 and x2 < 1)) and 0 or style.divider_size, scale)
+  local n = scale_round(x1 and x1 + ds or (x2 and self.size[x] - x2 or self.size[x] * self.divider), scale)
   self.a.position[x] = self.position[x]
   self.a.position[y] = self.position[y]
   self.a.size[x] = n - ds
@@ -696,7 +707,8 @@ function Node:resize(axis, value)
   -- the application works fine with non-integer values but to have pixel-perfect
   -- placements of view elements, like the scrollbar, we round the value to be
   -- an integer.
-  value = math.floor(value)
+  local scale = renderer.get_scale()
+  value = scale_floor(value, scale)
   if self.type == 'leaf' then
     -- If it is not locked we don't accept the
     -- resize operation here because for proportional panes the resize is
