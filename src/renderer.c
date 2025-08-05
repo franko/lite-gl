@@ -415,9 +415,7 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
   SDL_GetSurfaceClipRect(surface, &clip);
 
   const SDL_PixelFormatDetails *pixel_format = SDL_GetPixelFormatDetails(surface->format);
-  const int surface_scale = rs->scale;
-  double pen_x = x * surface_scale;
-  y *= surface_scale;
+  double pen_x = x;
   const int bytes_per_pixel = pixel_format->bytes_per_pixel;
   const char* end = text + len;
   uint8_t* destination_pixels = surface->pixels;
@@ -443,7 +441,7 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
     if (set->surface && color.a > 0 && end_x >= clip.x && start_x < clip_end_x) {
       uint8_t* source_pixels = set->surface->pixels;
       for (int line = metric->y0; line < metric->y1; ++line) {
-        int target_y = line + y - metric->bitmap_top + fonts[0]->baseline * surface_scale;
+        int target_y = line + y - metric->bitmap_top + fonts[0]->baseline;
         if (target_y < clip.y)
           continue;
         if (target_y >= clip_end_y)
@@ -490,28 +488,24 @@ double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t l
     else if(font != last || text == end) {
       double local_pen_x = text == end ? pen_x + adv : pen_x;
       if (underline)
-        ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height - 1, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+        ren_draw_rect(rs, (RenRect){last_pen_x, y + last->height - 1, (local_pen_x - last_pen_x), last->underline_thickness}, color);
       if (strikethrough)
-        ren_draw_rect(rs, (RenRect){last_pen_x, y / surface_scale + last->height / 2, (local_pen_x - last_pen_x) / surface_scale, last->underline_thickness * surface_scale}, color);
+        ren_draw_rect(rs, (RenRect){last_pen_x, y + last->height / 2, (local_pen_x - last_pen_x), last->underline_thickness}, color);
       last = font;
       last_pen_x = pen_x;
     }
 
     pen_x += adv;
   }
-  return pen_x / surface_scale;
+  return pen_x;
 }
 
 /******************* Rectangles **********************/
 void ren_draw_rect(RenSurface *rs, RenRect rect, RenColor color) {
   SDL_Surface *surface = rs->surface;
   if (color.a == 0 || !surface) { return; }
-  const int surface_scale = rs->scale;
 
-  SDL_Rect dest_rect = { rect.x * surface_scale,
-                         rect.y * surface_scale,
-                         rect.width * surface_scale,
-                         rect.height * surface_scale };
+  SDL_Rect dest_rect = { rect.x, rect.y, rect.width, rect.height };
 
   const SDL_PixelFormatDetails *pixel_format = SDL_GetPixelFormatDetails(surface->format);
   if (color.a == 0xff) {
