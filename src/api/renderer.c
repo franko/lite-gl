@@ -15,6 +15,12 @@ static int CURRENT_SURFACE_REF = LUA_NOREF;
 
 RenSurface *current_surface = NULL;
 
+static inline RenRect scaled_rect(lua_Number scale, lua_Number x, lua_Number y, lua_Number w, lua_Number h) {
+  int x1 = lfloor(x * scale), y1 = lfloor(y * scale);
+  int x2 = lfloor((x + w) * scale), y2 = lfloor((y + h) * scale);
+  return (RenRect) {x1, y1, x2 - x1, y2 - y1};
+}
+
 static RenSurface* get_current_surface(lua_State *L) {
   if (!current_surface) {
     luaL_error(L, "No current surface set. Call renderer.set_current_surface first.");
@@ -95,7 +101,7 @@ static int font_get_options(
 
 static int f_font_load(lua_State *L) {
   const char *spec = luaL_checkstring(L, 1);
-  float size = luaL_checknumber(L, 2);
+  const float size = luaL_checknumber(L, 2);
   int style = 0;
   ERenFontHinting hinting = FONT_HINTING_SLIGHT;
   ERenFontAntialiasing antialiasing = FONT_ANTIALIASING_SUBPIXEL;
@@ -112,8 +118,9 @@ static int f_font_load(lua_State *L) {
     return luaL_error(L, "Fontconfig: could not match \"%s\"", spec);
   }
 
+  const float scale = renwin_global_scale(&window_renderer);
   RenFont** font = lua_newuserdata(L, sizeof(RenFont*));
-  *font = ren_font_load(&window_renderer, path, size, antialiasing, hinting, style);
+  *font = ren_font_load(&window_renderer, path, size * scale, antialiasing, hinting, style);
 
   free(path);
 
@@ -243,7 +250,8 @@ static int f_font_get_size(lua_State *L) {
 static int f_font_set_size(lua_State *L) {
   RenFont* fonts[FONT_FALLBACK_MAX]; font_retrieve(L, fonts, 1);
   float size = luaL_checknumber(L, 2);
-  ren_font_group_set_size(&window_renderer, fonts, size);
+  float scale = renwin_global_scale(&window_renderer);
+  ren_font_group_set_size(&window_renderer, fonts, size * scale);
   return 0;
 }
 
@@ -345,13 +353,6 @@ static RenRect rect_to_grid(lua_Number x, lua_Number y, lua_Number w, lua_Number
   return (RenRect) {x1, y1, x2 - x1, y2 - y1};
 }
 
-static inline RenRect scaled_rect(lua_Number scale, lua_Number x, lua_Number y, lua_Number w, lua_Number h) {
-  int x1 = lfloor(x * scale), y1 = lfloor(y * scale);
-  int x2 = lfloor((x + w) * scale), y2 = lfloor((y + h) * scale);
-  return (RenRect) {x1, y1, x2 - x1, y2 - y1};
-}
-
-
 static int f_set_clip_rect(lua_State *L) {
   RenSurface *rs = get_current_surface(L);
   lua_Number x = luaL_checknumber(L, 1);
@@ -445,7 +446,8 @@ static int f_render_fill_rect(lua_State *L) {
   lua_Number h = luaL_checknumber(L, 4);
   RenColor color = checkcolor(L, 5, 255);
 
-  SDL_Rect rect = {(int)x, (int)y, (int)w, (int)h};
+  const lua_Number scale = renwin_global_scale(&window_renderer);
+  SDL_Rect rect = scaled_rect(scale, x, y, w, h);
   SDL_Color sdl_color = {color.r, color.g, color.b, color.a};
   renwin_render_fill_rect(&window_renderer, &rect, sdl_color);
 

@@ -38,10 +38,6 @@ static void* check_alloc(void *ptr) {
   return ptr;
 }
 
-static RenRect scaled_rect(const RenRect rect, const int scale) {
-  return (RenRect) {rect.x * scale, rect.y * scale, rect.width * scale, rect.height * scale};
-}
-
 /************************* Fonts *************************/
 
 typedef struct {
@@ -273,14 +269,14 @@ RenFont* ren_font_load(RenWindow *window_renderer, const char* path, float size,
   if (FT_Open_Face(library, &(FT_Open_Args){ .flags = FT_OPEN_STREAM, .stream = &font->stream }, 0, &face))
     goto failure;
 
-  const int surface_scale = window_renderer->scale;
-  const float scaled_size = roundf(size * surface_scale);
+  /* TODO: scaled_size remove scaled_size once the transition is done. */
+  const int scaled_size = lroundf(size);
   if (FT_Set_Pixel_Sizes(face, 0, scaled_size))
     goto failure;
 
   strcpy(font->path, path);
   font->face = face;
-  font->size = scaled_size / surface_scale;
+  font->size = scaled_size;
   font->height = (short)((face->height / (float)face->units_per_EM) * font->size);
   font->baseline = (short)((face->ascender / (float)face->units_per_EM) * font->size);
   font->antialiasing = antialiasing;
@@ -324,6 +320,7 @@ const char* ren_font_get_path(RenFont *font) {
   return font->path;
 }
 
+#if 0
 int ren_font_get_scale(RenFont *font) {
   /* Normally we may extract two scaling factor along x and y axis but,
      given the way we create fonts they should be always the same so we
@@ -332,6 +329,7 @@ int ren_font_get_scale(RenFont *font) {
   float surface_scale_y = (float)scaled_size_y / font->size;
   return (int) roundf(surface_scale_y);
 }
+#endif
 
 void ren_font_free(RenFont* font) {
   font_clear_glyph_cache(font);
@@ -361,12 +359,12 @@ float ren_font_group_get_size(RenFont **fonts) {
 }
 
 void ren_font_group_set_size(RenWindow *window_renderer, RenFont **fonts, float size) {
-  const int surface_scale = window_renderer->scale;
+  int size_rounded = lroundf(size);
   for (int i = 0; i < FONT_FALLBACK_MAX && fonts[i]; ++i) {
     font_clear_glyph_cache(fonts[i]);
     FT_Face face = fonts[i]->face;
-    FT_Set_Pixel_Sizes(face, 0, (int)(size*surface_scale));
-    fonts[i]->size = size;
+    FT_Set_Pixel_Sizes(face, 0, size_rounded);
+    fonts[i]->size = size_rounded;
     fonts[i]->height = (short)((face->height / (float)face->units_per_EM) * size);
     fonts[i]->baseline = (short)((face->ascender / (float)face->units_per_EM) * size);
     FT_Load_Char(face, ' ', font_set_load_options(fonts[i]));
@@ -384,7 +382,6 @@ double ren_font_group_get_width(RenFont **fonts, const char *text, size_t len, i
   const char* end = text + len;
   GlyphMetric* metric = NULL; GlyphSet* set = NULL;
   bool set_x_offset = x_offset == NULL;
-  int surface_scale = -1;
   while (text < end) {
     unsigned int codepoint;
     text = utf8_to_codepoint(text, &codepoint);
@@ -392,21 +389,18 @@ double ren_font_group_get_width(RenFont **fonts, const char *text, size_t len, i
     /* we assume font is not NULL here because the previous function always return
        a non-null font except is a null metric pointer is provided. */
     assert(font != NULL);
-    if (surface_scale < 0) {
-      surface_scale = ren_font_get_scale(font);
-    }
     if (!metric)
       break;
     width += metric->xadvance ? metric->xadvance : fonts[0]->space_advance;
     if (!set_x_offset) {
       set_x_offset = true;
-      *x_offset = metric->bitmap_left; // TODO: should this be scaled by the surface scale?
+      *x_offset = metric->bitmap_left;
     }
   }
   if (!set_x_offset) {
     *x_offset = 0;
   }
-  return width / surface_scale;
+  return width;
 }
 
 double ren_draw_text(RenSurface *rs, RenFont **fonts, const char *text, size_t len, float x, int y, RenColor color) {
@@ -553,7 +547,6 @@ void ren_resize_window(RenWindow *window_renderer) {
 
 void ren_set_clip_rect(RenSurface *rs, RenRect rect) {
   if (!rs->surface) return;
-  RenRect sr = scaled_rect(rect, rs->scale);
-  SDL_SetSurfaceClipRect(rs->surface, &(SDL_Rect){.x = sr.x, .y = sr.y, .w = sr.width, .h = sr.height});
+  SDL_SetSurfaceClipRect(rs->surface, &rect);
 }
 
